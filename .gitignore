@@ -1,5 +1,7 @@
 *~
 *.o
-tmp* *.o
+tmp*
 a.out
+/.idea/
+/__pycache__/
 
