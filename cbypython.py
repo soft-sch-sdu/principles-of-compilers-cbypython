@@ -19,9 +19,9 @@ def main():
 
     args = parser.parse_args()
     
-    p = args.input
-    
+    p = args.input    
     lexer = Lexer(p)
+    
     t = lexer.get_next_token()
     print(f"  .globl main")
     print(f"main:")

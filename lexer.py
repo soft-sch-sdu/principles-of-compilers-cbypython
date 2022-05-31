@@ -1,4 +1,5 @@
 from enum import Enum
+import sys
 
 
 class TokenType(Enum):
@@ -10,6 +11,9 @@ class TokenType(Enum):
     TK_INTEGER_CONST = 'INTEGER_CONST'
     TK_EOF           = 'EOF'
 
+    @classmethod
+    def members(cls):
+        return cls._value2member_map_
 
 class Token:
     def __init__(self, type, value):
@@ -24,6 +28,15 @@ class Lexer:
         # self.pos is an index into self.text
         self.pos = 0
         self.current_char = self.text[self.pos]
+        # # list of tokens
+        # self.tokens = []
+
+    def verror_at(self, error_list='some error'):
+        print(f"{self.text}", file=sys.stderr)
+        print("%{pos}s".format(pos=self.pos+1) % "^", end=' ', file=sys.stderr)
+        print(f"{error_list}", file=sys.stderr)
+        sys.exit(1)
+
 
     def advance(self):
         """Advance the `pos` pointer and set the `current_char` variable."""
@@ -67,17 +80,20 @@ class Lexer:
                 return self.number()
 
             # single-character token
-            # get enum member by value, e.g.
-            # TokenType('+') --> TokenType.PLUS
-            token_type = TokenType(self.current_char)
-
-            # create a token with a single-character lexeme as its value
-            token = Token(
-                type=token_type,
-                value=token_type.value,  # e.g. '+', '-', etc
-            )
-            self.advance()
-            return token
+            if self.current_char in TokenType.members():
+               # get enum member by value, e.g.
+                # TokenType('+') --> TokenType.PLUS
+                token_type = TokenType(self.current_char)
+                # create a token with a single-character lexeme as its value
+                token = Token(
+                    type=token_type,
+                    value=token_type.value,  # e.g. '+', '-', etc
+                )
+                self.advance()
+                return token
+            # no enum member with value equal to self.current_char
+            else:
+                self.verror_at("invalid token")
 
         # EOF (end-of-file) token indicates that there is no more
         # input left for lexical analysis
