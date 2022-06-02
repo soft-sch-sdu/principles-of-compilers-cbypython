@@ -1,3 +1,10 @@
+###############################################################################
+#                                                                             #
+#  LEXER                                                                     #
+#                                                                                #
+###############################################################################
+
+
 from enum import Enum
 import sys
 
@@ -6,7 +13,10 @@ class TokenType(Enum):
     # single-character token types
     TK_PLUS          = '+'
     TK_MINUS         = '-'
-
+    TK_MUL           = '*'
+    TK_DIV           = '/'
+    TK_LPAREN        = '('
+    TK_RPAREN        = ')'
     # misc
     TK_INTEGER_CONST = 'INTEGER_CONST'
     TK_EOF           = 'EOF'

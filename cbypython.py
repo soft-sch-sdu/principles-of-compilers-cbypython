@@ -2,7 +2,27 @@ import argparse
 import sys
 
 from lexer import *
+from parser import *
+from codegenerator import *
 
+
+class ErrorCode(Enum):
+    UNEXPECTED_TOKEN = 'Unexpected token'
+
+class Error(Exception):
+    def __init__(self, error_code=None, token=None, message=None):
+        self.error_code = error_code
+        self.token = token
+        # add exception class name before the message
+        self.message = f'{self.__class__.__name__}: {message}'
+
+
+class LexerError(Error):
+    pass
+
+
+class ParserError(Error):
+    pass
 
 ###############################################################################
 #                                                                             #
@@ -21,25 +41,35 @@ def main():
     
     p = args.input    
     lexer = Lexer(p)
-    
-    t = lexer.get_next_token()
-    print(f"  .globl main")
-    print(f"main:")
-    print(f"  mov ${t.value}, %rax")
-    t = lexer.get_next_token()
-    while t.type != TokenType.TK_EOF:
-        if t.type == TokenType.TK_PLUS:
-            t = lexer.get_next_token()
-            print(f"  add ${t.value}, %rax")
-            t = lexer.get_next_token()
-            continue
-        elif t.type == TokenType.TK_MINUS:
-            t = lexer.get_next_token()
-            print(f"  sub ${t.value}, %rax")
-            t = lexer.get_next_token()
-            continue
+    try:
+        parser = Parser(lexer)
+        tree = parser.parse()
+    except (LexerError, ParserError) as e:
+        print(e.message)
+        sys.exit(1)
 
-    print(f"  ret")
+    # lexer = Lexer(p)
+    # t = lexer.get_next_token()
+    codegenerator= Codegenerator(tree)
+    codegenerator.codegenerate()
+    # print(f"  .globl main")
+    # print(f"main:")
+
+    # print(f"  mov ${t.value}, %rax")
+    # t = lexer.get_next_token()
+    # while t.type != TokenType.TK_EOF:
+    #     if t.type == TokenType.TK_PLUS:
+    #         t = lexer.get_next_token()
+    #         print(f"  add ${t.value}, %rax")
+    #         t = lexer.get_next_token()
+    #         continue
+    #     elif t.type == TokenType.TK_MINUS:
+    #         t = lexer.get_next_token()
+    #         print(f"  sub ${t.value}, %rax")
+    #         t = lexer.get_next_token()
+    #         continue
+    #
+    # print(f"  ret")
 
 if __name__ == '__main__':
     main()
