@@ -20,5 +20,29 @@ assert 0 0
 assert 40 "42 -2"
 assert 41 " 12 + 34 - 5 "
 assert 6 "12 -2 *3"
+assert 6 "-12 +20 + (-2)"
+assert 6 "-12 +20 - (+2)"
+assert 10 "-12 +(+20) - (-2)"
+assert 5 "25-(20)"
+assert 5 "+(+5)"
+assert 10 "- (- (+10))"
 
+assert 0 '0==1'
+assert 1 '42==42'
+assert 1 '0!=1'
+assert 0 '42!=42'
+
+assert 1 '0<1'
+assert 0 '1<1'
+assert 0 '2<1'
+assert 1 '0<=1'
+assert 1 '1<=1'
+assert 0 '2<=1'
+
+assert 1 '1>0'
+assert 0 '1>1'
+assert 0 '1>2'
+assert 1 '1>=0'
+assert 1 '1>=1'
+assert 0 '1>=2'
 echo OK

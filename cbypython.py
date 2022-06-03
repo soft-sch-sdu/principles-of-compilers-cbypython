@@ -39,8 +39,12 @@ def main():
 
     args = parser.parse_args()
     
-    p = args.input    
+    p = args.input
+    # p = '- (- (+10))'
     lexer = Lexer(p)
+    # print(lexer.get_next_token().value)
+    # print(lexer.get_next_token().value)
+    # print(lexer.get_next_token().value)
     try:
         parser = Parser(lexer)
         tree = parser.parse()
@@ -48,28 +52,8 @@ def main():
         print(e.message)
         sys.exit(1)
 
-    # lexer = Lexer(p)
-    # t = lexer.get_next_token()
     codegenerator= Codegenerator(tree)
     codegenerator.codegenerate()
-    # print(f"  .globl main")
-    # print(f"main:")
-
-    # print(f"  mov ${t.value}, %rax")
-    # t = lexer.get_next_token()
-    # while t.type != TokenType.TK_EOF:
-    #     if t.type == TokenType.TK_PLUS:
-    #         t = lexer.get_next_token()
-    #         print(f"  add ${t.value}, %rax")
-    #         t = lexer.get_next_token()
-    #         continue
-    #     elif t.type == TokenType.TK_MINUS:
-    #         t = lexer.get_next_token()
-    #         print(f"  sub ${t.value}, %rax")
-    #         t = lexer.get_next_token()
-    #         continue
-    #
-    # print(f"  ret")
 
 if __name__ == '__main__':
     main()

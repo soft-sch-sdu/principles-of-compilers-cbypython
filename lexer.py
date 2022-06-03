@@ -3,8 +3,7 @@
 #  LEXER                                                                     #
 #                                                                                #
 ###############################################################################
-
-
+import string
 from enum import Enum
 import sys
 
@@ -15,6 +14,13 @@ class TokenType(Enum):
     TK_MINUS         = '-'
     TK_MUL           = '*'
     TK_DIV           = '/'
+    TK_NEG           = 'unary-'
+    TK_LT            = '<'
+    TK_GT            = '>'
+    TK_EQ            = '=='
+    TK_NE            = '!='
+    TK_GE            = '>='
+    TK_LE            = '<='
     TK_LPAREN        = '('
     TK_RPAREN        = ')'
     # misc
@@ -75,6 +81,16 @@ class Lexer:
         token.value = int(result)
         return token
 
+
+    # Read a punctuator token from p and returns
+    def read_punct(self, p):
+        if p.startswith("==", self.pos) or \
+            p.startswith("!=", self.pos) or \
+            p.startswith("<=", self.pos) or \
+            p.startswith(">=", self.pos):
+            return 2
+        return self.current_char in string.punctuation
+
     def get_next_token(self):
         """Lexical analyzer (also known as scanner or tokenizer)
 
@@ -82,15 +98,29 @@ class Lexer:
         apart into tokens. One token at a time.
         """
         while self.current_char is not None:
+            # Skip whitespace characters
             if self.current_char.isspace():
                 self.skip_whitespace()
                 continue
 
+            # Numeric literal
             if self.current_char.isdigit():
                 return self.number()
 
-            # single-character token
-            if self.current_char in TokenType.members():
+            # Punctuators
+            # two-characters punctuator
+            if self.read_punct(self.text) == 2:
+                token_type = TokenType(self.text[self.pos:self.pos+2])
+                # create a token with two-characters lexeme as its value
+                token = Token(
+                    type=token_type,
+                    value=token_type.value,  # e.g. '!=', '==', etc
+                )
+                self.advance()
+                self.advance()
+                return token
+            # single-character punctuator
+            elif self.current_char in TokenType.members():
                # get enum member by value, e.g.
                 # TokenType('+') --> TokenType.PLUS
                 token_type = TokenType(self.current_char)
