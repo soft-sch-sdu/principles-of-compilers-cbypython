@@ -42,9 +42,8 @@ def main():
     p = args.input
     # p = '- (- (+10))'
     lexer = Lexer(p)
-    # print(lexer.get_next_token().value)
-    # print(lexer.get_next_token().value)
-    # print(lexer.get_next_token().value)
+    # lexer.print_all_tokens()
+
     try:
         parser = Parser(lexer)
         tree = parser.parse()

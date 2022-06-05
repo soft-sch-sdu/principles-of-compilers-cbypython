@@ -11,20 +11,10 @@ class Codegenerator(NodeVisitor):
         self.depth = 0
         self.tree = tree
 
-    def codegenerate(self):
-        print(f"  .globl main")
-        print(f"main:")
-        #Traverse the AST to emit assembly.
-        tree = self.tree
-        self.visit(tree)
-        print(f"  ret")
-        assert(self.depth == 0)
-
     def visit_UnaryOp_Node(self, node):
         self.visit(node.right)
         if node.op.type == TokenType.TK_MINUS:
             print(f"  neg %rax")
-
 
     def visit_BinaryOp_Node(self, node):
         self.visit(node.right)
@@ -67,3 +57,13 @@ class Codegenerator(NodeVisitor):
 
     def visit_Num_Node(self, node):
         print(f"  mov ${node.value}, %rax")
+
+    def codegenerate(self):
+        print(f"  .globl main")
+        print(f"main:")
+        # Traverse the AST to emit assembly.
+        tree = self.tree
+        for node in tree:
+            self.visit(node)
+        print(f"  ret")
+        assert (self.depth == 0)

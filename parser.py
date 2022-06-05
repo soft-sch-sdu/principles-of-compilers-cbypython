@@ -1,4 +1,5 @@
 from lexer import *
+
 ###############################################################################
 #                                                                             #
 #   AST_Node type
@@ -12,29 +13,35 @@ from lexer import *
 ###############################################################################
 
 
-class AST:
-    pass
+class AST_Node:
+    def __init__(self):
+        self.next = None
 
 
-class UnaryOp_Node(AST):
+class UnaryOp_Node(AST_Node):
     def __init__(self, op, right):
+        self.next = None
         self.token = self.op = op
         self.right = right
 
 
-class BinaryOp_Node(AST):
+class BinaryOp_Node(AST_Node):
     def __init__(self, left, op, right):
+        self.next = None
         self.left = left
         self.token = self.op = op
         self.right = right
 
 
-class Num_Node(AST):
+class Num_Node(AST_Node):
     def __init__(self, token):
+        self.next = None
         self.token = token
         self.value = token.value
 
 
+class Expression_Node(AST_Node):
+    pass
 
 ###############################################################################
 #                                                                             #
@@ -87,17 +94,24 @@ class Parser:
                 token=self.current_token,
             )
 
-    # primary = num | "(" expr ")"
+    # primary = "(" expr ")" | ident | num
     def primary(self):
         token = self.current_token
-        if token.type == TokenType.TK_INTEGER_CONST:
-            self.eat(TokenType.TK_INTEGER_CONST)
-            return Num_Node(token)
-        elif token.type == TokenType.TK_LPAREN:
+
+        # "(" expr ")"
+        if token.type == TokenType.TK_LPAREN:
             self.eat(TokenType.TK_LPAREN)
             node = self.expression()
             self.eat(TokenType.TK_RPAREN)
             return node
+        # ident
+        elif token.type == TokenType.TK_IDENT:
+            self.eat(TokenType.TK_IDENT)
+            return Num_Node(token)
+        # num
+        elif token.type == TokenType.TK_INTEGER_CONST:
+            self.eat(TokenType.TK_INTEGER_CONST)
+            return Num_Node(token)
 
     #unary = ("+" | "-")? primary
     def unary(self):
@@ -180,25 +194,42 @@ class Parser:
                 continue
             return node
 
-    # expr = equality
+    # expression = equality
     def expression(self):
         node = self.equality()
         return node
 
+    # expression-statement = expression ";"
+    def expression_statement(self):
+        node = self.expression()
+        self.eat(TokenType.TK_SEMICOLON)
+        return node;
+
+    # statement = expression-statement
+    def statement(self):
+        return self.expression_statement()
+
+    # program = statement*
     def parse(self):
         """
-        expr = equality
+        program = statement*
+        statement = expression-statement
+        expression-statement = expression ";"
+        expression = equality
         equality = relational ("==" relational | "! =" relational)*
         relational = add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
         add_sub = mul_div ("+" mul_div | "-" mul_div)*
         mul_div = unary ("*" unary | "/" unary)*
         unary = ("+" | "-")? primary
-        primary = num | "(" expr ")"
+        primary = "(" expr ")" | ident | num
         """
-        node = self.expression()
+        statement_nodes = []
+        while self.current_token.type != TokenType.TK_EOF:
+            node = self.statement()
+            statement_nodes.append(node)
         if self.current_token.type != TokenType.TK_EOF:
             self.error(
                 error_code=ErrorCode.UNEXPECTED_TOKEN,
                 token=self.current_token,
             )
-        return node
+        return statement_nodes

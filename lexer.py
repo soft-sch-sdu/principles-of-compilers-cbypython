@@ -23,7 +23,9 @@ class TokenType(Enum):
     TK_LE            = '<='
     TK_LPAREN        = '('
     TK_RPAREN        = ')'
+    TK_SEMICOLON     = ';'
     # misc
+    TK_IDENT         = 'IDENT'
     TK_INTEGER_CONST = 'INTEGER_CONST'
     TK_EOF           = 'EOF'
 
@@ -66,6 +68,13 @@ class Lexer:
         while self.current_char is not None and self.current_char.isspace():
             self.advance()
 
+    # Returns true if c is valid as the first character of an identifier.
+    def _is_ident1(self, c):
+        return ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z') or c == '_'
+    # Returns true if c is valid as a non-first character of an identifier.
+    def _is_ident2(self, c):
+        return self._is_ident1(c) or ('0' <= c and c <= '9')
+
     def number(self):
         """Return a (multidigit) integer or float consumed from the input."""
 
@@ -107,6 +116,19 @@ class Lexer:
             if self.current_char.isdigit():
                 return self.number()
 
+            # Identifier(Beginning with a - z or A - Z or _, not digits, not punctutors other than _)
+            if (self._is_ident1(self.current_char)):
+                result = self.current_char
+                self.advance()
+                while (self._is_ident2(self.current_char)):
+                    result += self.current_char
+                    self.advance()
+                token = Token(
+                    type=TokenType.TK_IDENT,
+                    value=result
+                )
+                return token
+
             # Punctuators
             # two-characters punctuator
             if self.read_punct(self.text) == 2:
@@ -138,3 +160,11 @@ class Lexer:
         # EOF (end-of-file) token indicates that there is no more
         # input left for lexical analysis
         return Token(type=TokenType.TK_EOF, value=None)
+
+
+    def print_all_tokens(self):
+        token = self.get_next_token()
+        while token.type != TokenType.TK_EOF:
+            print(token.value)
+            token = self.get_next_token()
+        sys.exit(0)
