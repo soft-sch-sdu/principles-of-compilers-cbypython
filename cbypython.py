@@ -4,6 +4,7 @@ import sys
 from lexer import *
 from parser import *
 from codegenerator import *
+from semanticanalyzer import *
 
 
 class ErrorCode(Enum):
@@ -30,7 +31,6 @@ class ParserError(Error):
 #                                                                             #
 ###############################################################################
 
-
 def main():
     parser = argparse.ArgumentParser(
         description='cbypython - Simple C Compiler'
@@ -40,19 +40,18 @@ def main():
     args = parser.parse_args()
     
     p = args.input
-    # p = '- (- (+10))'
     lexer = Lexer(p)
     # lexer.print_all_tokens()
 
-    try:
-        parser = Parser(lexer)
-        tree = parser.parse()
-    except (LexerError, ParserError) as e:
-        print(e.message)
-        sys.exit(1)
+    parser = Parser(lexer)
+    tree = parser.parse()
 
-    codegenerator= Codegenerator(tree)
-    codegenerator.codegenerate()
+    # do what? don't know yet
+    semantic_analyzer = SemanticAnalyzer(tree)
+    symbol_table, offset = semantic_analyzer.semantic_analyze()
+
+    code_generator= Codegenerator(tree, symbol_table, offset)
+    code_generator.code_generate()
 
 if __name__ == '__main__':
     main()

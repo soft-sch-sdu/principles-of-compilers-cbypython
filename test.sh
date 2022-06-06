@@ -52,4 +52,9 @@ assert 0 '1>2;'
 assert 1 '1>=0;'
 assert 1 '1>=1;'
 assert 0 '1>=2;'
+
+assert 9 '7; 8; 9;'
+assert 5 'a =5;'
+assert 6 'a=5; b = a +1;'
+assert 4 'a=5; b = a - 1;'
 echo OK

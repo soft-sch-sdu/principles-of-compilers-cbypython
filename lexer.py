@@ -27,6 +27,7 @@ class TokenType(Enum):
     # misc
     TK_IDENT         = 'IDENT'
     TK_INTEGER_CONST = 'INTEGER_CONST'
+    TK_ASSIGN        = '='
     TK_EOF           = 'EOF'
 
     @classmethod
@@ -167,4 +168,4 @@ class Lexer:
         while token.type != TokenType.TK_EOF:
             print(token.value)
             token = self.get_next_token()
-        sys.exit(0)
+        # sys.exit(0)

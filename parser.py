@@ -1,15 +1,12 @@
 from lexer import *
 
 ###############################################################################
-#                                                                             #
-#   AST_Node type
-#   ND_ADD,     : +
-#   ND_SUB,     : -
-#   ND_MUL,     : *
-#   ND_DIV,     : /
-#   ND_NUM,     : num
-#   ND_EXPR,    : Expression
-#                                                                             #
+#
+#   AST_Node type:
+#   UnaryOp_Node         : +, -
+#   BinaryOp_Node        : +, -, *, /, <, <=, >, >=, ==, !=
+#   Num_Node             : num
+#
 ###############################################################################
 
 
@@ -33,6 +30,14 @@ class BinaryOp_Node(AST_Node):
         self.right = right
 
 
+class Assign_Node(AST_Node):
+    def __init__(self, left, op, right):
+        self.next = None
+        self.left = left
+        self.token = self.op = op
+        self.right = right
+
+
 class Num_Node(AST_Node):
     def __init__(self, token):
         self.next = None
@@ -40,8 +45,14 @@ class Num_Node(AST_Node):
         self.value = token.value
 
 
-class Expression_Node(AST_Node):
-    pass
+class Var_Node(AST_Node):
+    """The Var node is constructed out of ID token."""
+    def __init__(self, token):
+        self.next = None
+        self.token = token
+        self.value = token.value
+
+
 
 ###############################################################################
 #                                                                             #
@@ -57,6 +68,10 @@ class NodeVisitor:
 
     def generic_visit(self, node):
         raise Exception('No visit_{} method'.format(type(node).__name__))
+
+
+
+
 
 
 ###############################################################################
@@ -107,7 +122,7 @@ class Parser:
         # ident
         elif token.type == TokenType.TK_IDENT:
             self.eat(TokenType.TK_IDENT)
-            return Num_Node(token)
+            return Var_Node(token)
         # num
         elif token.type == TokenType.TK_INTEGER_CONST:
             self.eat(TokenType.TK_INTEGER_CONST)
@@ -194,9 +209,18 @@ class Parser:
                 continue
             return node
 
-    # expression = equality
-    def expression(self):
+    # assign = equality ("=" assign)?
+    def assign(self):
         node = self.equality()
+        token = self.current_token
+        if token.type == TokenType.TK_ASSIGN:
+            self.eat(TokenType.TK_ASSIGN)
+            node = Assign_Node(left=node, op=token, right = self.assign())
+        return node
+
+    # expression = assign
+    def expression(self):
+        node = self.assign()
         return node
 
     # expression-statement = expression ";"
@@ -215,7 +239,8 @@ class Parser:
         program = statement*
         statement = expression-statement
         expression-statement = expression ";"
-        expression = equality
+        expression = assign
+        assign = equality ("=" assign)?
         equality = relational ("==" relational | "! =" relational)*
         relational = add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
         add_sub = mul_div ("+" mul_div | "-" mul_div)*
@@ -223,6 +248,7 @@ class Parser:
         unary = ("+" | "-")? primary
         primary = "(" expr ")" | ident | num
         """
+
         statement_nodes = []
         while self.current_token.type != TokenType.TK_EOF:
             node = self.statement()
