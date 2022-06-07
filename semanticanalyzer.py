@@ -48,12 +48,15 @@ class SemanticAnalyzer(NodeVisitor):
     def visit_UnaryOp_Node(self, node):
         pass
 
+    def visit_Return_Node(self, node):
+        self.visit(node.right)
+
     def visit_BinaryOp_Node(self, node):
         self.visit(node.left)
         self.visit(node.right)
 
     def visit_Assign_Node(self, node):
-        # check: left side of assign is a varible
+        # make sure the left side of assign is a varible
         if node.left.token.type != TokenType.TK_IDENT:
             print(f"the left side of assign is not a variable", file=sys.stderr)
         self.visit(node.left)

@@ -24,6 +24,8 @@ class TokenType(Enum):
     TK_LPAREN        = '('
     TK_RPAREN        = ')'
     TK_SEMICOLON     = ';'
+    # block of reserved words
+    TK_RETURN        = 'return'
     # misc
     TK_IDENT         = 'IDENT'
     TK_INTEGER_CONST = 'INTEGER_CONST'
@@ -124,6 +126,15 @@ class Lexer:
                 while (self._is_ident2(self.current_char)):
                     result += self.current_char
                     self.advance()
+                if result in TokenType.members():
+                    # get enum member by value, e.g.
+                    token_type = TokenType(result)
+                    # create a token
+                    token = Token(
+                        type=token_type,
+                        value=token_type.value,  # e.g. 'return', etc
+                    )
+                    return token
                 token = Token(
                     type=TokenType.TK_IDENT,
                     value=result

@@ -41,12 +41,12 @@ def main():
     
     p = args.input
     lexer = Lexer(p)
+
     # lexer.print_all_tokens()
 
     parser = Parser(lexer)
     tree = parser.parse()
 
-    # do what? don't know yet
     semantic_analyzer = SemanticAnalyzer(tree)
     symbol_table, offset = semantic_analyzer.semantic_analyze()
 

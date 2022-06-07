@@ -21,6 +21,11 @@ class UnaryOp_Node(AST_Node):
         self.token = self.op = op
         self.right = right
 
+class Return_Node(AST_Node):
+    def __init__(self, tok, right):
+        self.next = None
+        self.token = tok
+        self.right = right
 
 class BinaryOp_Node(AST_Node):
     def __init__(self, left, op, right):
@@ -230,7 +235,13 @@ class Parser:
         return node;
 
     # statement = expression-statement
+    #             | "return" expression-statement
     def statement(self):
+        token = self.current_token
+        if token.type == TokenType.TK_RETURN:
+            self.eat(TokenType.TK_RETURN)
+            node = Return_Node(tok=token, right = self.expression_statement())
+            return node
         return self.expression_statement()
 
     # program = statement*
@@ -238,6 +249,7 @@ class Parser:
         """
         program = statement*
         statement = expression-statement
+                    | "return" expression-statement
         expression-statement = expression ";"
         expression = assign
         assign = equality ("=" assign)?

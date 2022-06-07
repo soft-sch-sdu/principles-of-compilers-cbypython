@@ -25,6 +25,11 @@ class Codegenerator(NodeVisitor):
         if node.op.type == TokenType.TK_MINUS:
             print(f"  neg %rax")
 
+    def visit_Return_Node(self, node):
+        self.visit(node.right)
+        if node.token.type == TokenType.TK_RETURN:
+            print(f"  jmp .L.return")
+
     def visit_BinaryOp_Node(self, node):
         self.visit(node.right)
         print(f"  push %rax")
@@ -106,6 +111,7 @@ class Codegenerator(NodeVisitor):
         for node in tree:
             self.visit(node)
 
+        print(f".L.return:")
         # Epilogue
         print(f"  mov %rbp, %rsp")
         print(f"  pop %rbp")

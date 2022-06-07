@@ -54,7 +54,10 @@ assert 1 '1>=1;'
 assert 0 '1>=2;'
 
 assert 9 '7; 8; 9;'
-assert 5 'a =5;'
-assert 6 'a=5; b = a +1;'
-assert 4 'a=5; b = a - 1;'
+assert 9 'a =5; b =9;'
+assert 6 'a =5; b = a +1;'
+assert 4 '_a =5; b = _a - 1;'
+assert 8 'return 7+1;'
+assert 13 'return 7+2*3;'
+assert 6 'a=3; return a+3;'
 echo OK
