@@ -23,6 +23,10 @@ class TokenType(Enum):
     TK_LE            = '<='
     TK_LPAREN        = '('
     TK_RPAREN        = ')'
+    TK_LBRACE        = '{'
+    TK_RBRACE        = '}'
+    TK_LBRACK        = '['
+    TK_RBRACK        = ']'
     TK_SEMICOLON     = ';'
     # block of reserved words
     TK_RETURN        = 'return'
@@ -126,6 +130,7 @@ class Lexer:
                 while (self._is_ident2(self.current_char)):
                     result += self.current_char
                     self.advance()
+                # if keyword, not common identifier
                 if result in TokenType.members():
                     # get enum member by value, e.g.
                     token_type = TokenType(result)
@@ -135,11 +140,13 @@ class Lexer:
                         value=token_type.value,  # e.g. 'return', etc
                     )
                     return token
-                token = Token(
-                    type=TokenType.TK_IDENT,
-                    value=result
-                )
-                return token
+                # if not keyword, but identifier
+                else:
+                    token = Token(
+                        type=TokenType.TK_IDENT,
+                        value=result
+                    )
+                    return token
 
             # Punctuators
             # two-characters punctuator

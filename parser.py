@@ -27,6 +27,13 @@ class Return_Node(AST_Node):
         self.token = tok
         self.right = right
 
+class Block_Node(AST_Node):
+    def __init__(self, ltok, rtok, statement_nodes):
+        self.next = None
+        self.ltoken = ltok
+        self.rtoken = rtok
+        self.statement_nodes = statement_nodes
+
 class BinaryOp_Node(AST_Node):
     def __init__(self, left, op, right):
         self.next = None
@@ -232,17 +239,36 @@ class Parser:
     def expression_statement(self):
         node = self.expression()
         self.eat(TokenType.TK_SEMICOLON)
-        return node;
+        return node
+
 
     # statement = expression-statement
     #             | "return" expression-statement
+    #             | "{" compound_statement "}"
     def statement(self):
         token = self.current_token
         if token.type == TokenType.TK_RETURN:
             self.eat(TokenType.TK_RETURN)
             node = Return_Node(tok=token, right = self.expression_statement())
             return node
+        if token.type == TokenType.TK_LBRACE:
+            ltok = self.current_token  # "{"
+            self.eat(TokenType.TK_LBRACE)
+            statement_nodes = self.compound_statement()
+            rtok = self.current_token  # "}"
+            self.eat(TokenType.TK_RBRACE)
+            node  = Block_Node(ltok, rtok, statement_nodes)
+            return node
         return self.expression_statement()
+
+    # compound_statement = statement*
+    def compound_statement(self):
+        statement_nodes = []
+        while self.current_token.type != TokenType.TK_RBRACE:
+            node = self.statement()
+            statement_nodes.append(node)
+        return statement_nodes
+
 
     # program = statement*
     def parse(self):
@@ -250,6 +276,8 @@ class Parser:
         program = statement*
         statement = expression-statement
                     | "return" expression-statement
+                    | "{" compound_statement "}"
+        compound_statement = statement*
         expression-statement = expression ";"
         expression = assign
         assign = equality ("=" assign)?

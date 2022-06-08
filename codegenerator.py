@@ -88,6 +88,10 @@ class Codegenerator(NodeVisitor):
     def visit_Num_Node(self, node):
         print(f"  mov ${node.value}, %rax")
 
+    def visit_Block_Node(self, node):
+        for eachnode in node.statement_nodes:
+            self.visit(eachnode)
+
     def visit_Var_Node(self, node):
         # var is right-value
         symbol = self.symbol_table.lookup(node.value)

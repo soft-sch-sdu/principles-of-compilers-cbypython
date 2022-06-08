@@ -62,6 +62,10 @@ class SemanticAnalyzer(NodeVisitor):
         self.visit(node.left)
         self.visit(node.right)
 
+    def visit_Block_Node(self, node):
+        for eachnode in node.statement_nodes:
+            self.visit(eachnode)
+
     def visit_Num_Node(self, node):
         pass
 
