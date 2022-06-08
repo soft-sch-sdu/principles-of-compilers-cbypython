@@ -113,7 +113,8 @@ class Codegenerator(NodeVisitor):
         # Traverse the AST to emit assembly.
         tree = self.tree
         for node in tree:
-            self.visit(node)
+            if node is not None:
+                self.visit(node)
 
         print(f".L.return:")
         # Epilogue

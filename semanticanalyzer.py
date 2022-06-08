@@ -85,6 +85,7 @@ class SemanticAnalyzer(NodeVisitor):
         # Traverse the AST to construct symbol table.
         tree = self.tree
         for node in tree:
-            self.visit(node)
+            if node is not None:
+                self.visit(node)
 
         return self.symbol_table, self.offset

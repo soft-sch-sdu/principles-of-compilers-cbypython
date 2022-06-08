@@ -64,4 +64,7 @@ assert 6 'a=3; return a+3; 9;'
 
 assert 9 '{7; 8; 9;}'
 assert 9 '{_a =5; b =9;}'
+
+assert 9 '7; ; 9;'
+assert 14 '{_a =5; ;; ; b = _a + 9;;;;}'
 echo OK

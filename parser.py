@@ -235,10 +235,15 @@ class Parser:
         node = self.assign()
         return node
 
-    # expression-statement = expression ";"
+    # expression-statement = expression? ";"
     def expression_statement(self):
-        node = self.expression()
-        self.eat(TokenType.TK_SEMICOLON)
+        token = self.current_token
+        node = None
+        if token.type == TokenType.TK_SEMICOLON:
+            self.eat(TokenType.TK_SEMICOLON)
+        else:
+            node = self.expression()
+            self.eat(TokenType.TK_SEMICOLON)
         return node
 
 
@@ -266,7 +271,8 @@ class Parser:
         statement_nodes = []
         while self.current_token.type != TokenType.TK_RBRACE:
             node = self.statement()
-            statement_nodes.append(node)
+            if node is not None: # abandon "  ;", i.e., null statement
+                statement_nodes.append(node)
         return statement_nodes
 
 
@@ -278,7 +284,7 @@ class Parser:
                     | "return" expression-statement
                     | "{" compound_statement "}"
         compound_statement = statement*
-        expression-statement = expression ";"
+        expression-statement = expression? ";"
         expression = assign
         assign = equality ("=" assign)?
         equality = relational ("==" relational | "! =" relational)*
