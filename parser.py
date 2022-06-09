@@ -151,15 +151,16 @@ class Parser:
             self.eat(TokenType.TK_INTEGER_CONST)
             return Num_Node(token)
 
-    #unary = ("+" | "-")? primary
+    #unary = ("+" | "-") unary
+    #        | primary
     def unary(self):
         token = self.current_token
         if token.type == TokenType.TK_PLUS:
             self.eat(TokenType.TK_PLUS)
-            return UnaryOp_Node(op=token, right=self.primary())
+            return UnaryOp_Node(op=token, right=self.unary())
         elif token.type == TokenType.TK_MINUS:
             self.eat(TokenType.TK_MINUS)
-            return UnaryOp_Node(op=token, right=self.primary())
+            return UnaryOp_Node(op=token, right=self.unary())
         else:
             return self.primary()
 
@@ -343,7 +344,7 @@ class Parser:
         relational = add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
         add_sub = mul_div ("+" mul_div | "-" mul_div)*
         mul_div = unary ("*" unary | "/" unary)*
-        unary = ("+" | "-")? primary
+        unary = ("+" | "-") primary | primary
         primary = "(" expr ")" | ident | num
         """
 
