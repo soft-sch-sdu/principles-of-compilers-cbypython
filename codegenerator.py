@@ -101,6 +101,9 @@ class Codegenerator(NodeVisitor):
         print(f"  mov (%rax), %rax");
 
 
+    def visit_VarDecl_Node(self, node):
+        pass
+
     def code_generate(self):
         print(f"  .globl main")
         print(f"main:")

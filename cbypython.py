@@ -25,6 +25,10 @@ class LexerError(Error):
 class ParserError(Error):
     pass
 
+
+class SemanticError(Error):
+    pass
+
 ###############################################################################
 #                                                                             #
 #  DRIVER          - by leon                                                      #

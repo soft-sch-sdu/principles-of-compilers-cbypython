@@ -27,9 +27,11 @@ class TokenType(Enum):
     TK_RBRACE        = '}'
     TK_LBRACK        = '['
     TK_RBRACK        = ']'
+    TK_COMMA         = ','
     TK_SEMICOLON     = ';'
     # block of reserved words
     TK_RETURN        = 'return'
+    TK_INT           = 'int'
     # misc
     TK_IDENT         = 'IDENT'
     TK_INTEGER_CONST = 'INTEGER_CONST'

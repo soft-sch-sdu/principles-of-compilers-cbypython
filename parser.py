@@ -65,6 +65,17 @@ class Var_Node(AST_Node):
         self.value = token.value
 
 
+class Type(AST_Node):
+    def __init__(self, token):
+        self.token = token
+        self.value = token.value
+
+
+class VarDecl_Node(AST_Node):
+    def __init__(self, type_node, var_node):
+        self.type_node = type_node
+        self.var_node = var_node
+
 
 ###############################################################################
 #                                                                             #
@@ -266,13 +277,52 @@ class Parser:
             return node
         return self.expression_statement()
 
-    # compound_statement = statement*
+    def type_specification(self):
+        """type_spec : int
+                     | REAL
+        """
+        token = self.current_token
+        if self.current_token.type == TokenType.TK_INT:
+            self.eat(TokenType.TK_INT)
+        # elif self.current_token.type == TokenType.REAL:
+        #     self.eat(TokenType.REAL)
+        node = Type(token)
+        return node
+
+    # variable_declaration = type_specification (indentifier ("=" expr)? ("," indentifier ("=" expr)?)*)? ";"
+    def variable_declaration(self):
+        type_node = self.type_specification()
+        variable_nodes = []
+        while self.current_token.type != TokenType.TK_SEMICOLON:
+            if self.current_token.type == TokenType.TK_IDENT:
+                var_node = Var_Node(self.current_token)
+                node = VarDecl_Node(type_node, var_node)
+                self.eat(TokenType.TK_IDENT)
+                variable_nodes.append(node)
+                if self.current_token.type == TokenType.TK_COMMA:
+                    self.eat(TokenType.TK_COMMA)
+
+            #
+            # if self.current_token.type != TokenType.TK_ASSIGN:
+            #     continue
+
+        self.eat(TokenType.TK_SEMICOLON)
+        return variable_nodes
+
+
+
+    # compound_statement = (variable_declaration | statement)*
     def compound_statement(self):
         statement_nodes = []
         while self.current_token.type != TokenType.TK_RBRACE:
-            node = self.statement()
-            if node is not None: # abandon "  ;", i.e., null statement
-                statement_nodes.append(node)
+            if self.current_token.type == TokenType.TK_INT:
+                variable_nodes = self.variable_declaration()
+                for eachnode in variable_nodes:
+                    statement_nodes.append(eachnode)
+            else:
+                node = self.statement()
+                if node is not None: # abandon "  ;", i.e., null statement
+                    statement_nodes.append(node)
         return statement_nodes
 
 
@@ -283,7 +333,9 @@ class Parser:
         statement = expression-statement
                     | "return" expression-statement
                     | "{" compound_statement "}"
-        compound_statement = statement*
+        compound_statement = (variable_declaration | statement)*
+        variable_declaration = type_specification (indentifier ("=" expr)? ("," indentifier ("=" expr)?)*)? ";"
+        type_specification = "int"
         expression-statement = expression? ";"
         expression = assign
         assign = equality ("=" assign)?

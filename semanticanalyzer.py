@@ -1,3 +1,5 @@
+import sys
+
 from parser import *
 
 ###############################################################################
@@ -11,8 +13,9 @@ class Symbol:
 
 
 class Var_Symbol(Symbol):
-    def __init__(self, var_name, offset):
+    def __init__(self, var_name, var_type, offset):
         self.var_name = var_name        # variable name
+        self.var_type = var_type
         self.offset = offset       # offset from RSP
 
 
@@ -73,13 +76,20 @@ class SemanticAnalyzer(NodeVisitor):
         var_name = node.value
         var_symbol = self.symbol_table.lookup(var_name)
         if var_symbol is None:
+            print(f"semantic error, var not declared", file=sys.stderr)
+            sys.exit(1)
+
+    def visit_VarDecl_Node(self, node):
+        var_name = node.var_node.value
+        var_symbol = self.symbol_table.lookup(var_name)
+        if var_symbol is None:
             # We have some information we need to create a variable symbol.
             # Create the symbol and insert it into the symbol table.
+            var_type = node.type_node.value
             self.offset += 8
             var_offset = -self.offset
-            var_symbol = Var_Symbol(var_name, var_offset)
+            var_symbol = Var_Symbol(var_name, var_type, var_offset)
             self.symbol_table.insert(var_symbol)
-
 
     def semantic_analyze(self):
         # Traverse the AST to construct symbol table.
