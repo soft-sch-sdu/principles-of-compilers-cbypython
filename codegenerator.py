@@ -12,6 +12,7 @@ class Codegenerator(NodeVisitor):
         self.tree = tree
         self.symbol_table = symbol_table
         self.offset = offset
+        self.parameter_registers=['%rdi', '%rsi', '%rdx', '%rcx', '%r8', '%r9']
 
 
     # Round up `n` to the nearest multiple of `align`. For instance,
@@ -105,6 +106,14 @@ class Codegenerator(NodeVisitor):
         pass
 
     def visit_FunctionCall_Node(self, node):
+        nparams = 0
+        for eachnode in node.actual_parameter_nodes:
+            self.visit(eachnode)
+            print(f"  push %rax")
+            nparams += 1
+        for i in range(nparams, 0, -1):
+            print(f"  pop {self.parameter_registers[i-1]}")
+
         print(f"  mov $0, %rax")
         print(f"  call {node.function_name}")
 

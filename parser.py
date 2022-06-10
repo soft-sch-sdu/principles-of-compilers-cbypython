@@ -50,9 +50,10 @@ class Assign_Node(AST_Node):
         self.right = right
 
 class FunctionCall_Node(AST_Node):
-    def __init__(self, function_name, token):
+    def __init__(self, function_name, actual_parameter_nodes, token):
         self.next = None
         self.function_name = function_name
+        self.actual_parameter_nodes = actual_parameter_nodes
         self.token = token
 
 
@@ -139,7 +140,7 @@ class Parser:
             )
 
     # primary = "(" expr ")" | identifier args? | num
-    # args = "(" ")"
+    # args = "(" (assign ("," assign)*)? ")"
     def primary(self):
         token = self.current_token
 
@@ -155,9 +156,22 @@ class Parser:
             self.eat(TokenType.TK_IDENT)
             # Function call
             if self.current_token.type == TokenType.TK_LPAREN:
+                function_name = token.value
                 self.eat(TokenType.TK_LPAREN)
+                actual_parameter_nodes = []
+                if self.current_token.type != TokenType.TK_RPAREN:
+                    node = self.assign()
+                    actual_parameter_nodes.append(node)
+
+                while self.current_token.type == TokenType.TK_COMMA:
+                    self.eat(TokenType.TK_COMMA)
+                    node = self.assign()
+                    actual_parameter_nodes.append(node)
                 self.eat(TokenType.TK_RPAREN)
-                node = FunctionCall_Node(token.value, token)
+                node = FunctionCall_Node(
+                        function_name = function_name,
+                        actual_parameter_nodes = actual_parameter_nodes,
+                        token = token)
                 return node
             # Variable
             return Var_Node(token)
@@ -362,7 +376,7 @@ class Parser:
         mul_div = unary ("*" unary | "/" unary)*
         unary = ("+" | "-") primary | primary
         primary = "(" expr ")" | identifier args?| num
-        args = "(" ")"
+        args = "(" (assign ("," assign)*)? ")"
         """
 
         statement_nodes = []

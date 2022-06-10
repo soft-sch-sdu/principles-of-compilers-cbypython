@@ -90,5 +90,12 @@ assert 14 '{int _a; _a=5; ;; ; int b; b = _a + 9;;;;}'
 assert 3 '{ return ret3(); }'
 assert 5 '{ return ret5(); }'
 assert 9 '{ ret3()+5; 9; }'
+
+assert 21 '{ return add6(1,1+1,3,4,5,6); }'
+assert 27 '{ return add6(2,3,4,5,6,3+4); }'
+assert 33 '{ return add6(3,4,5,6,7,8); }'
+assert 66 '{ return add6(1,2,add6(3,4,5,6,7,8),9,10,11); }'
+assert 136 '{ return add6(1,2,add6(3,add6(4,5,6,7,8,9),10,11,12,13),14,15,16); }'
+
 assert 6 '{myprint(); return 6; }'
 echo OK
