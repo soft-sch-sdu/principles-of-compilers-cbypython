@@ -98,11 +98,15 @@ class Codegenerator(NodeVisitor):
         offset = symbol.offset
         print(f"  lea {offset}(%rbp), %rax")
         # right-value
-        print(f"  mov (%rax), %rax");
+        print(f"  mov (%rax), %rax")
 
 
     def visit_VarDecl_Node(self, node):
         pass
+
+    def visit_FunctionCall_Node(self, node):
+        print(f"  mov $0, %rax")
+        print(f"  call {node.function_name}")
 
     def code_generate(self):
         print(f"  .globl main")

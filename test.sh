@@ -1,10 +1,27 @@
 #!/bin/bash
+cat <<EOF | gcc -xc -c -o tmp2.o -
+#include <stdio.h>
+int ret3() { return 3; }
+
+int ret5() { return 5; }
+
+int add(int x, int y) { return x+y; }
+
+int sub(int x, int y) { return x-y; }
+
+int add6(int a, int b, int c, int d, int e, int f) {
+  return a+b+c+d+e+f;
+}
+
+int myprint() {printf("Hello, software school.sdu.cn!!!!!!\n");}
+EOF
+
 assert() {
   expected="$1"
   input="$2"
 
   python3 cbypython.py "$input" > tmp.s
-  cc -o tmp tmp.s
+  gcc -o tmp tmp.s tmp2.o
   ./tmp
   actual="$?"
 
@@ -69,4 +86,9 @@ assert 9 '{int _a; _a =5; int b; b =9;}'
 
 assert 9 '{7; ; 9;}'
 assert 14 '{int _a; _a=5; ;; ; int b; b = _a + 9;;;;}'
+
+assert 3 '{ return ret3(); }'
+assert 5 '{ return ret5(); }'
+assert 9 '{ ret3()+5; 9; }'
+assert 6 '{myprint(); return 6; }'
 echo OK

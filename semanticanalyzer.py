@@ -91,6 +91,9 @@ class SemanticAnalyzer(NodeVisitor):
             var_symbol = Var_Symbol(var_name, var_type, var_offset)
             self.symbol_table.insert(var_symbol)
 
+    def visit_FunctionCall_Node(self, node):
+        pass
+
     def semantic_analyze(self):
         # Traverse the AST to construct symbol table.
         tree = self.tree
