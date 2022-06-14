@@ -57,10 +57,9 @@ assert 33 ' int main() { return add6(3,4,5,6,7,8); }'
 assert 66 ' int main() { return add6(1,2,add6(3,4,5,6,7,8),9,10,11); }'
 assert 136 ' int main() { return add6(1,2,add6(3,add6(4,5,6,7,8,9),10,11,12,13),14,15,16); }'
 assert 5  'int main {int a; a=2; {int b; b=a+3;return b;} }'
-
+assert 14  'int main() {int a,b,c,d; a=3; return a+3+ foo(); 9;} int foo(){ return 3+5;}'
 
 assert 6 ' int main() {myprint(); return 6; }'
 
-#"int firstfun() { int a; {{int b; } {;}} }"
 
 echo OK

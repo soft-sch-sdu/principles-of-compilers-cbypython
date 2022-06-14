@@ -243,10 +243,11 @@ class UnaryOp_Node(AST_Node):
         self.right = right
 
 class Return_Node(AST_Node):
-    def __init__(self, tok, right):
+    def __init__(self, tok, right, function_name):
         self.next = None
         self.token = tok
         self.right = right
+        self.function_name = function_name
 
 class Block_Node(AST_Node):
     def __init__(self, ltok, rtok, statement_nodes):
@@ -310,6 +311,8 @@ class FunctionDef_Node(AST_Node):
         self.type_node = type_node
         self.function_name = function_name
         self.block_node = block_node
+        # is there better place to store this information?
+        self.offset = 0
 
 ###############################################################################
 #                                                                             #
@@ -342,6 +345,7 @@ class Parser:
         self.lexer = lexer
         # set current token to the first token taken from the input
         self.current_token = self.get_next_token()
+        self.current_function_name = ''
 
     def get_next_token(self):
         return self.lexer.get_next_token()
@@ -523,7 +527,8 @@ class Parser:
         token = self.current_token
         if token.type == TokenType.TK_RETURN:
             self.eat(TokenType.TK_RETURN)
-            node = Return_Node(tok=token, right = self.expression_statement())
+            node = Return_Node(tok=token, right = self.expression_statement(),  \
+                                  function_name = self.current_function_name)
             return node
         if token.type == TokenType.TK_LBRACE:
             return self.block()
@@ -595,7 +600,9 @@ class Parser:
             self.eat(TokenType.TK_LPAREN)
             self.eat(TokenType.TK_RPAREN)
 
+        self.current_function_name = function_name
         block_node = self.block()
+
         return FunctionDef_Node(type_node, function_name, block_node)
 
     # program = function_definition*
@@ -795,6 +802,8 @@ class SemanticAnalyzer(NodeVisitor):
 
         self.visit(node.block_node) # visit function block
 
+        node.offset = offset
+
         self.current_scope = self.current_scope.enclosing_scope
         # self.log(f'LEAVE scope: {function_name}')
 
@@ -839,7 +848,7 @@ class Codegenerator(NodeVisitor):
     def visit_Return_Node(self, node):
         self.visit(node.right)
         if node.token.type == TokenType.TK_RETURN:
-            print(f"  jmp .L.return")
+            print(f"  jmp .{node.function_name}.return")
 
     def visit_BinaryOp_Node(self, node):
         self.visit(node.right)
@@ -955,17 +964,25 @@ class Codegenerator(NodeVisitor):
         # leon: initialize the offset for each function
         global offset
         offset = 0
-        function_name = node.function_name
-        function_symbol = Function_Symbol(function_name)
-        self.current_scope.insert(function_symbol)
-
-        # self.log(f'ENTER scope: {function_name}')
-        function_scope = ScopedSymbolTable(
-            scope_name=function_name,
-            scope_level=self.current_scope.scope_level + 1,
-            enclosing_scope=self.current_scope
-        )
-        self.current_scope = function_scope
+        print(f"  .text")
+        print(f"  .globl {node.function_name}")
+        print(f"{node.function_name}:")
+        # Prologue
+        print(f"  push %rbp")
+        print(f"  mov %rsp, %rbp")
+        stack_size = self.align_to(node.offset, 16)
+        print(f"  sub ${stack_size}, %rsp")
+        # function_name = node.function_name
+        # function_symbol = Function_Symbol(function_name)
+        # self.current_scope.insert(function_symbol)
+        #
+        # # self.log(f'ENTER scope: {function_name}')
+        # function_scope = ScopedSymbolTable(
+        #     scope_name=function_name,
+        #     scope_level=self.current_scope.scope_level + 1,
+        #     enclosing_scope=self.current_scope
+        # )
+        # self.current_scope = function_scope
 
         # TODO
         # Insert parameters into the procedure scope
@@ -978,33 +995,39 @@ class Codegenerator(NodeVisitor):
 
         self.visit(node.block_node)  # visit function block
 
-        self.current_scope = self.current_scope.enclosing_scope
-        # self.log(f'LEAVE scope: {function_name}')
+        # self.current_scope = self.current_scope.enclosing_scope
+        # # self.log(f'LEAVE scope: {function_name}')
+        #
+        # # accessed by the interpreter when executing procedure call
+        # function_symbol.block_ast = node.block_node
+        print(f".{node.function_name}.return:")
+        # Epilogue
+        print(f"  mov %rbp, %rsp")
+        print(f"  pop %rbp")
+        print(f"  ret")
 
-        # accessed by the interpreter when executing procedure call
-        function_symbol.block_ast = node.block_node
 
     def code_generate(self, tree):
-        global offset
-        print(f"  .globl main")
-        print(f"main:")
-        # Prologue
-        print(f"  push %rbp")
-        print(f"  mov %rsp, %rbp")
-        stack_size = self.align_to(offset, 16)
-        print(f"  sub ${stack_size}, %rsp")
+        # global offset
+        # print(f"  .globl main")
+        # print(f"main:")
+        # # Prologue
+        # print(f"  push %rbp")
+        # print(f"  mov %rsp, %rbp")
+        # stack_size = self.align_to(offset, 16)
+        # print(f"  sub ${stack_size}, %rsp")
 
         # Traverse the AST to emit assembly.
         for node in tree:
             if node is not None:
                 self.visit(node)
 
-        print(f".L.return:")
-        # Epilogue
-        print(f"  mov %rbp, %rsp")
-        print(f"  pop %rbp")
-        print(f"  ret")
-        assert (self.depth == 0)
+        # print(f".L.return:")
+        # # Epilogue
+        # print(f"  mov %rbp, %rsp")
+        # print(f"  pop %rbp")
+        # print(f"  ret")
+        # assert (self.depth == 0)
 
 
 ###############################################################################
