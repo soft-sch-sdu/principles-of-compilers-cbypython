@@ -5,7 +5,7 @@ from enum import Enum
 
 
 _SHOULD_LOG_SCOPE = False  # see '--scope' command line option
-parameter_registers=['%rdi', '%rsi', '%rdx', '%rcx', '%r8', '%r9']
+parameter_registers=['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
 offset = -999
 
 
@@ -34,11 +34,11 @@ class SemanticError(Error):
 
 
 
-###############################################################################
-#                                                                             #
-#  LEXER                                                                     #
-#                                                                                #
-###############################################################################
+##################################################################################################
+#
+#  LEXER
+#
+##################################################################################################
 
 class TokenType(Enum):
     # single-character token types
@@ -222,14 +222,14 @@ class Lexer:
             token = self.get_next_token()
 
 
-###############################################################################
+##################################################################################################
 #
 #   AST_Node type:
 #   UnaryOp_Node         : +, -
 #   BinaryOp_Node        : +, -, *, /, <, <=, >, >=, ==, !=
 #   Num_Node             : num
 #
-###############################################################################
+##################################################################################################
 
 class AST_Node:
     def __init__(self):
@@ -294,31 +294,37 @@ class Var_Node(AST_Node):
         self.token = token
         self.value = token.value
 
-
 class Type(AST_Node):
     def __init__(self, token):
         self.token = token
         self.value = token.value
-
 
 class VarDecl_Node(AST_Node):
     def __init__(self, type_node, var_node):
         self.type_node = type_node
         self.var_node = var_node
 
+
+class FormalParam_Node(AST_Node):
+    def __init__(self, type_node, parameter_node):
+        self.type_node = type_node
+        self.parameter_node = parameter_node
+
+
 class FunctionDef_Node(AST_Node):
-    def __init__(self, type_node, function_name, block_node):
+    def __init__(self, type_node, function_name, formal_parameters, block_node):
         self.type_node = type_node
         self.function_name = function_name
+        self.formal_parameters = formal_parameters
         self.block_node = block_node
         # is there better place to store this information?
         self.offset = 0
 
-###############################################################################
-#                                                                             #
-#  AST visitors (walkers)                                                     #
-#                                                                             #
-###############################################################################
+##################################################################################################
+#
+#  AST visitors (walkers)
+#
+##################################################################################################
 
 class NodeVisitor:
     def visit(self, node):
@@ -330,15 +336,11 @@ class NodeVisitor:
         raise Exception('No visit_{} method'.format(type(node).__name__))
 
 
-
-
-
-
-###############################################################################
-#                                                                             #
-#  PARSER                                                                     #
-#                                                                                #
-###############################################################################
+##################################################################################################
+#
+#  PARSER
+#
+##################################################################################################
 
 class Parser:
     def __init__(self, lexer):
@@ -534,10 +536,8 @@ class Parser:
             return self.block()
         return self.expression_statement()
 
+    # type_specification = int  //TODO: REAL
     def type_specification(self):
-        """type_spec : int
-                     | REAL
-        """
         token = self.current_token
         if self.current_token.type == TokenType.TK_INT:
             self.eat(TokenType.TK_INT)
@@ -561,7 +561,6 @@ class Parser:
 
         self.eat(TokenType.TK_SEMICOLON)
         return variable_nodes
-
 
 
     # compound_statement = (variable_declaration | statement)*
@@ -588,9 +587,28 @@ class Parser:
             self.eat(TokenType.TK_RBRACE)
             return Block_Node(ltok, rtok, statement_nodes)
 
+    # formal_parameter = type_specification identifier
+    def formal_parameter(self):
+        type_node = self.type_specification()
+        parameter_node = Var_Node(self.current_token)
+        self.eat(TokenType.TK_IDENT)
+        return FormalParam_Node(type_node, parameter_node)
 
 
-    # function_definition= type_specification identifier "("  ")" "{" compound_statement "}"
+    # formal_parameters = formal_parameter (, formal_parameter)*
+    def formal_parameters(self):
+        formal_params = []
+        formal_params.append(self.formal_parameter())
+        while self.current_token.type != TokenType.TK_RPAREN:
+            if self.current_token.type == TokenType.TK_COMMA:
+                self.eat(TokenType.TK_COMMA)
+                formal_params.append(self.formal_parameter())
+            else:
+                print(f"parameter list error")
+                exit(1)
+        return formal_params
+
+    # function_definition= type_specification identifier "(" formal_parameters? ")" block
     def function_definition(self):
         type_node = self.type_specification()
         function_name = self.current_token.value
@@ -598,25 +616,31 @@ class Parser:
 
         if self.current_token.type == TokenType.TK_LPAREN:
             self.eat(TokenType.TK_LPAREN)
+            formal_params = []
+            if self.current_token.type != TokenType.TK_RPAREN:
+                formal_params = self.formal_parameters()
             self.eat(TokenType.TK_RPAREN)
 
         self.current_function_name = function_name
         block_node = self.block()
 
-        return FunctionDef_Node(type_node, function_name, block_node)
+        return FunctionDef_Node(type_node, function_name, formal_params, block_node)
+
 
     # program = function_definition*
     def parse(self):
         """
         program = function_definition*
+        function_definition = type_specification identifier "(" formal_parameters? ")" block
+        formal_parameters = formal_parameter ("," formal_parameter)*
+        formal_parameter = type_specification identifier
+        type_specification = "int"
+        block = "{" compound_statement "}"
+        compound_statement = (variable_declaration | statement)*
         statement = expression-statement
                     | "return" expression-statement
                     | block
-        block = "{" compound_statement "}"
-        compound_statement = (variable_declaration | statement)*
-        variable_declaration = type_specification (indentifier ("=" expr)? ("," indentifier ("=" expr)?)*)? ";"
-        function_definition = type_specification identifier "("  ")" block
-        type_specification = "int"
+        variable_declaration = type_specification (identifier ("=" expr)? ("," identifier ("=" expr)?)*)? ";"
         expression-statement = expression? ";"
         expression = assign
         assign = equality ("=" assign)?
@@ -642,11 +666,11 @@ class Parser:
 
 
 
-###############################################################################
-#                                                                             #
-#  SYMBOLS, TABLES, SEMANTIC ANALYSIS                                         #
-#                                                                             #
-###############################################################################
+##################################################################################################
+#
+#  SYMBOLS, TABLES, SEMANTIC ANALYSIS
+#
+##################################################################################################
 
 class Symbol:
     def __init__(self, name, type=None):
@@ -657,7 +681,7 @@ class Function_Symbol(Symbol):
     def __init__(self, name, formal_params=None):
         super().__init__(name)
         # a list of VarSymbol objects
-        self.formal_params = [] if formal_params is None else formal_params
+        self.formal_parameters = [] if formal_params is None else formal_params
         # a reference to procedure's body (AST sub-tree)
         self.block_ast = None
 
@@ -668,6 +692,12 @@ class Var_Symbol(Symbol):
         self.type = var_type
         self.offset = var_offset       # offset from RBP
 
+
+class Parameter_Symbol(Symbol):
+    def __init__(self, parameter_name, parameter_type, parameter_offset):
+        self.name = parameter_name           # parameter name
+        self.type = parameter_type
+        self.offset = parameter_offset       # offset from RBP
 
 class ScopedSymbolTable:
     def __init__(self, scope_name, scope_level, enclosing_scope=None):
@@ -696,11 +726,11 @@ class ScopedSymbolTable:
             return self.enclosing_scope.lookup(name)
 
 
-###############################################################################
-#                                                                             #
-#  SEMANTIC-ANALYZER                                                                     #
-#                                                                                #
-###############################################################################
+##################################################################################################
+#
+#  SEMANTIC-ANALYZER
+#
+##################################################################################################
 
 class SemanticAnalyzer(NodeVisitor):
     def __init__(self):
@@ -770,9 +800,17 @@ class SemanticAnalyzer(NodeVisitor):
         # leon
         offset += 8
         var_offset = -offset
-
         var_symbol = Var_Symbol(var_name, var_type, var_offset)
         self.current_scope.insert(var_symbol)
+
+    def visit_FormalParam_Node(self, node):
+        global offset
+        parameter_name = node.parameter_node.value
+        parameter_type = node.type_node.value
+        offset += 8
+        parameter_offset = -offset
+        parameter_symbol = Parameter_Symbol(parameter_name, parameter_type, parameter_offset)
+        self.current_scope.insert(parameter_symbol)
 
 
     def visit_FunctionDef_Node(self, node):
@@ -791,14 +829,10 @@ class SemanticAnalyzer(NodeVisitor):
         )
         self.current_scope = function_scope
 
-        # TODO
-        # Insert parameters into the procedure scope
-        # for param in node.formal_params:
-        #     param_type = self.current_scope.lookup(param.type_node.value)
-        #     param_name = param.var_node.value
-        #     var_symbol = VarSymbol(param_name, param_type)
-        #     self.current_scope.insert(var_symbol)
-        #     function_symbol.formal_params.append(var_symbol)
+
+        # Insert formal_parameters into the function scope
+        for eachparam in node.formal_parameters:
+            self.visit(eachparam)
 
         self.visit(node.block_node) # visit function block
 
@@ -820,16 +854,21 @@ class SemanticAnalyzer(NodeVisitor):
                 self.visit(node)
 
 
+
+##################################################################################################
+#
+#  CODE-GENERATOR
+#
+##################################################################################################
+
 class Codegenerator(NodeVisitor):
     def __init__(self):
-        self.depth = 0
-        self.current_scope = None
         global_scope = ScopedSymbolTable(
             scope_name='global',
-            # global scope, level is 0,
-            # in which are global variables, and functions
-            scope_level=0,
-            enclosing_scope=self.current_scope,  # None
+            # global scope, with level 0,
+            # includes global variables, and functions
+            scope_level = 0,
+            enclosing_scope = None
         )
         self.current_scope = global_scope
 
@@ -838,7 +877,6 @@ class Codegenerator(NodeVisitor):
     # align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
     def align_to(self, n, align):
       return int((n + align - 1) / align) * align
-
 
     def visit_UnaryOp_Node(self, node):
         self.visit(node.right)
@@ -895,8 +933,7 @@ class Codegenerator(NodeVisitor):
             var_name = node.left.token.value
             var_symbol = self.current_scope.lookup(var_name)
             if var_symbol is None:
-                print(f"var_symbol error")
-                # self.error(error_code=ErrorCode.ID_NOT_FOUND, token=node.token)
+                self.error(error_code=ErrorCode.ID_NOT_FOUND, token=node.token)
 
             # var is left-value
             var_offset = var_symbol.offset
@@ -942,11 +979,20 @@ class Codegenerator(NodeVisitor):
         global offset
         var_name = node.var_node.value
         var_type = node.type_node.value
-        offset += 8
+        offset += 8       # accumulation of the size of vars
         var_offset = -offset
-
         var_symbol = Var_Symbol(var_name, var_type, var_offset)
         self.current_scope.insert(var_symbol)
+
+
+    def visit_FormalParam_Node(self, node):
+        global offset
+        parameter_name = node.parameter_node.value
+        parameter_type = node.type_node.value
+        offset += 8  # accumulation of the size of vars
+        parameter_offset = -offset
+        parameter_symbol = Parameter_Symbol(parameter_name, parameter_type, parameter_offset)
+        self.current_scope.insert(parameter_symbol)
 
     def visit_FunctionCall_Node(self, node):
         nparams = 0
@@ -955,7 +1001,7 @@ class Codegenerator(NodeVisitor):
             print(f"  push %rax")
             nparams += 1
         for i in range(nparams, 0, -1):
-            print(f"  pop {parameter_registers[i-1]}")
+            print(f"  pop %{parameter_registers[i-1]}")
 
         print(f"  mov $0, %rax")
         print(f"  call {node.function_name}")
@@ -972,34 +1018,22 @@ class Codegenerator(NodeVisitor):
         print(f"  mov %rsp, %rbp")
         stack_size = self.align_to(node.offset, 16)
         print(f"  sub ${stack_size}, %rsp")
-        # function_name = node.function_name
-        # function_symbol = Function_Symbol(function_name)
-        # self.current_scope.insert(function_symbol)
-        #
-        # # self.log(f'ENTER scope: {function_name}')
-        # function_scope = ScopedSymbolTable(
-        #     scope_name=function_name,
-        #     scope_level=self.current_scope.scope_level + 1,
-        #     enclosing_scope=self.current_scope
-        # )
-        # self.current_scope = function_scope
 
-        # TODO
-        # Insert parameters into the procedure scope
-        # for param in node.formal_params:
-        #     param_type = self.current_scope.lookup(param.type_node.value)
-        #     param_name = param.var_node.value
-        #     var_symbol = VarSymbol(param_name, param_type)
-        #     self.current_scope.insert(var_symbol)
-        #     function_symbol.formal_params.append(var_symbol)
+        # The purpose is to compute offset for parameters.
+        # Offset for local variables will be computed when visiting block node
+        for eachparam in node.formal_parameters:
+            self.visit(eachparam)
+        # Save passed-by-register arguments to the stack
+        i = 0
+        for eachparam in node.formal_parameters:
+            symbol = self.current_scope.lookup(eachparam.parameter_node.value)
+            parameter_offset = symbol.offset
+            print(f"  mov %{parameter_registers[i]}, {parameter_offset}(%rbp)")
+            i += 1
 
-        self.visit(node.block_node)  # visit function block
+        # Visit function block
+        self.visit(node.block_node)
 
-        # self.current_scope = self.current_scope.enclosing_scope
-        # # self.log(f'LEAVE scope: {function_name}')
-        #
-        # # accessed by the interpreter when executing procedure call
-        # function_symbol.block_ast = node.block_node
         print(f".{node.function_name}.return:")
         # Epilogue
         print(f"  mov %rbp, %rsp")
@@ -1008,33 +1042,18 @@ class Codegenerator(NodeVisitor):
 
 
     def code_generate(self, tree):
-        # global offset
-        # print(f"  .globl main")
-        # print(f"main:")
-        # # Prologue
-        # print(f"  push %rbp")
-        # print(f"  mov %rsp, %rbp")
-        # stack_size = self.align_to(offset, 16)
-        # print(f"  sub ${stack_size}, %rsp")
-
         # Traverse the AST to emit assembly.
         for node in tree:
             if node is not None:
                 self.visit(node)
 
-        # print(f".L.return:")
-        # # Epilogue
-        # print(f"  mov %rbp, %rsp")
-        # print(f"  pop %rbp")
-        # print(f"  ret")
-        # assert (self.depth == 0)
 
 
-###############################################################################
-#                                                                             #
-#  DRIVER          - by leon                                                      #
-#                                                                             #
-###############################################################################
+##################################################################################################
+#
+#  DRIVER
+#
+##################################################################################################
 
 def main():
     parser = argparse.ArgumentParser(
