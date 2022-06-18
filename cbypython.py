@@ -64,6 +64,9 @@ class TokenType(Enum):
     # block of reserved words
     TK_RETURN        = 'return'
     TK_INT           = 'int'
+    TK_IF            = 'if'
+    TK_THEN          = 'then'
+    TK_ELSE          = 'else'
     # misc
     TK_IDENT         = 'IDENT'
     TK_INTEGER_CONST = 'INTEGER_CONST'
@@ -241,6 +244,13 @@ class UnaryOp_Node(AST_Node):
         self.next = None
         self.token = self.op = op
         self.right = right
+
+class If_Node(AST_Node):
+    def __init__(self, condition, then_statement, else_statement):
+        self.next = None
+        self.condition = condition
+        self.then_statement = then_statement
+        self.else_statement = else_statement
 
 class Return_Node(AST_Node):
     def __init__(self, tok, right, function_name):
@@ -525,15 +535,36 @@ class Parser:
     # statement = expression-statement
     #             | "return" expression-statement
     #             | block
+    #             | "if" "(" expression ")" statement ("else" statement)?
     def statement(self):
         token = self.current_token
+        # "return" expression-statement
         if token.type == TokenType.TK_RETURN:
             self.eat(TokenType.TK_RETURN)
             node = Return_Node(tok=token, right = self.expression_statement(),  \
                                   function_name = self.current_function_name)
             return node
+        # block
         if token.type == TokenType.TK_LBRACE:
             return self.block()
+        # "if" "(" expression ")" statement ("else" statement)?
+        if token.type == TokenType.TK_IF:
+            condition = None
+            then_statement = None
+            else_statement = None
+            self.eat(TokenType.TK_IF)
+            if self.current_token.type == TokenType.TK_LPAREN:
+                self.eat(TokenType.TK_LPAREN)
+                condition = self.expression()
+                self.eat(TokenType.TK_RPAREN)
+                if self.current_token.type == TokenType.TK_THEN:
+                    self.eat(TokenType.TK_THEN)
+                    then_statement = self.statement()
+                    if self.current_token.type == TokenType.TK_ELSE:
+                        self.eat(TokenType.TK_ELSE)
+                        else_statement = self.statement()
+            return If_Node(condition, then_statement, else_statement)
+        # expression-statement
         return self.expression_statement()
 
     # type_specification = int  //TODO: REAL
@@ -640,6 +671,7 @@ class Parser:
         statement = expression-statement
                     | "return" expression-statement
                     | block
+                    | "if" "(" expression ")" statement ("else" statement)?
         variable_declaration = type_specification (identifier ("=" expr)? ("," identifier ("=" expr)?)*)? ";"
         expression-statement = expression? ";"
         expression = assign
@@ -766,6 +798,13 @@ class SemanticAnalyzer(NodeVisitor):
         self.visit(node.left)
         self.visit(node.right)
 
+    def visit_If_Node(self, node):
+        self.visit(node.condition)
+        if node.then_statement is not None:
+            self.visit(node.then_statement)
+        if node.else_statement is not None:
+            self.visit(node.else_statement)
+
     def visit_Block_Node(self, node):
         block_name= self.current_scope.scope_name + f' block' + \
                                    f"{self.current_scope.scope_level + 1}"
@@ -811,7 +850,6 @@ class SemanticAnalyzer(NodeVisitor):
         parameter_offset = -offset
         parameter_symbol = Parameter_Symbol(parameter_name, parameter_type, parameter_offset)
         self.current_scope.insert(parameter_symbol)
-
 
     def visit_FunctionDef_Node(self, node):
         # leon: initialize the offset for each function
@@ -860,6 +898,9 @@ class SemanticAnalyzer(NodeVisitor):
 #  CODE-GENERATOR
 #
 ##################################################################################################
+class Count():
+    i = 0
+
 
 class Codegenerator(NodeVisitor):
     def __init__(self):
@@ -949,6 +990,21 @@ class Codegenerator(NodeVisitor):
 
     def visit_Num_Node(self, node):
         print(f"  mov ${node.value}, %rax")
+
+    def visit_If_Node(self, node):
+        Count.i += 1
+        self.visit(node.condition)
+        print(f"  cmp $0, %rax")
+        print(f"  je  .L.else.{Count.i}")
+        if node.then_statement is not None:
+            self.visit(node.then_statement)
+        print(f"  jmp .L.end.{Count.i}")
+        print(f".L.else.{Count.i}:")
+        if node.else_statement is not None:
+            self.visit(node.else_statement)
+        print(f".L.end.{Count.i}:")
+
+
 
     def visit_Block_Node(self, node):
         block_name= self.current_scope.scope_name + f' block' + \

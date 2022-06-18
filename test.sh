@@ -72,6 +72,11 @@ assert 21  ' int foo(int a, int b, int c, int d, int e, int f){
                   return foo(1,2,3,4,5,6);
              } '
 
+assert 3 ' int main() {if(1) then return 3; else return 5;}'
+assert 5 ' int main() {if(0) then return 3; else return 5;}'
+assert 5 ' int main() {if(1>2) then return 3; else return 5;}'
+assert 3 ' int main() {if(1<2) then ; return 3;}'
+assert 3 ' int main() {if(1>2) then return 5; else ; return 3;}'
 assert 6 ' int main() {myprint(); return 6; }'
 
 
