@@ -6,11 +6,18 @@ from enum import Enum
 
 _SHOULD_LOG_SCOPE = False  # see '--scope' command line option
 parameter_registers=['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
-offset = -999
 
+# global variable "Offset.sum" used for code-generatioin
+class Offset:
+    sum = -999
+
+# global variable "Count.i" used for "if" statement
+class Count():
+    i = 0
 
 class ErrorCode(Enum):
     UNEXPECTED_TOKEN = 'Unexpected token'
+
 
 class Error(Exception):
     def __init__(self, error_code=None, token=None, message=None):
@@ -303,6 +310,7 @@ class Var_Node(AST_Node):
         self.next = None
         self.token = token
         self.value = token.value
+        self.symbol = None
 
 class Type(AST_Node):
     def __init__(self, token):
@@ -315,10 +323,12 @@ class VarDecl_Node(AST_Node):
         self.var_node = var_node
 
 
+
 class FormalParam_Node(AST_Node):
     def __init__(self, type_node, parameter_node):
         self.type_node = type_node
         self.parameter_node = parameter_node
+        self.parameter_symbol = None
 
 
 class FunctionDef_Node(AST_Node):
@@ -327,7 +337,6 @@ class FunctionDef_Node(AST_Node):
         self.function_name = function_name
         self.formal_parameters = formal_parameters
         self.block_node = block_node
-        # is there better place to store this information?
         self.offset = 0
 
 ##################################################################################################
@@ -723,7 +732,7 @@ class Var_Symbol(Symbol):
         self.name = var_name           # variable name
         self.type = var_type
         self.offset = var_offset       # offset from RBP
-
+        self.symbol = None
 
 class Parameter_Symbol(Symbol):
     def __init__(self, parameter_name, parameter_type, parameter_offset):
@@ -737,7 +746,6 @@ class ScopedSymbolTable:
         self.scope_name = scope_name
         self.scope_level = scope_level
         self.enclosing_scope = enclosing_scope
-
 
     def insert(self, symbol):
         self._symbols[symbol.name] = symbol
@@ -831,30 +839,31 @@ class SemanticAnalyzer(NodeVisitor):
         if var_symbol is None:
             print(f"semantic error, var not declared", file=sys.stderr)
             sys.exit(1)
+        else:
+            node.symbol = var_symbol
 
     def visit_VarDecl_Node(self, node):
-        global offset
         var_name = node.var_node.value
         var_type = node.type_node.value
         # leon
-        offset += 8
-        var_offset = -offset
+        Offset.sum += 8
+        var_offset = -Offset.sum
         var_symbol = Var_Symbol(var_name, var_type, var_offset)
         self.current_scope.insert(var_symbol)
 
+
     def visit_FormalParam_Node(self, node):
-        global offset
         parameter_name = node.parameter_node.value
         parameter_type = node.type_node.value
-        offset += 8
-        parameter_offset = -offset
+        Offset.sum += 8
+        parameter_offset = -Offset.sum
         parameter_symbol = Parameter_Symbol(parameter_name, parameter_type, parameter_offset)
         self.current_scope.insert(parameter_symbol)
+        node.parameter_symbol = parameter_symbol
 
     def visit_FunctionDef_Node(self, node):
         # leon: initialize the offset for each function
-        global offset
-        offset = 0
+        Offset.sum = 0
         function_name = node.function_name
         function_symbol = Function_Symbol(function_name)
         self.current_scope.insert(function_symbol)
@@ -874,7 +883,7 @@ class SemanticAnalyzer(NodeVisitor):
 
         self.visit(node.block_node) # visit function block
 
-        node.offset = offset
+        node.offset = Offset.sum
 
         self.current_scope = self.current_scope.enclosing_scope
         # self.log(f'LEAVE scope: {function_name}')
@@ -898,22 +907,8 @@ class SemanticAnalyzer(NodeVisitor):
 #  CODE-GENERATOR
 #
 ##################################################################################################
-class Count():
-    i = 0
-
 
 class Codegenerator(NodeVisitor):
-    def __init__(self):
-        global_scope = ScopedSymbolTable(
-            scope_name='global',
-            # global scope, with level 0,
-            # includes global variables, and functions
-            scope_level = 0,
-            enclosing_scope = None
-        )
-        self.current_scope = global_scope
-
-
     # Round up `n` to the nearest multiple of `align`. For instance,
     # align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
     def align_to(self, n, align):
@@ -971,13 +966,8 @@ class Codegenerator(NodeVisitor):
 
     def visit_Assign_Node(self, node):
         if node.left.token.type == TokenType.TK_IDENT:
-            var_name = node.left.token.value
-            var_symbol = self.current_scope.lookup(var_name)
-            if var_symbol is None:
-                self.error(error_code=ErrorCode.ID_NOT_FOUND, token=node.token)
-
             # var is left-value
-            var_offset = var_symbol.offset
+            var_offset = node.left.symbol.offset
             print(f"  lea {var_offset}(%rbp), %rax")
             # left-value
             print(f"  push %rax")
@@ -1005,50 +995,24 @@ class Codegenerator(NodeVisitor):
         print(f".L.end.{Count.i}:")
 
 
-
     def visit_Block_Node(self, node):
-        block_name= self.current_scope.scope_name + f' block' + \
-                                   f"{self.current_scope.scope_level + 1}"
-        # self.log(f'ENTER scope: {block_name}')
-        block_scope = ScopedSymbolTable(
-            scope_name= self.current_scope.scope_name + f' block' + \
-                                   f"{self.current_scope.scope_level + 1}",
-            scope_level=self.current_scope.scope_level + 1,
-            enclosing_scope=self.current_scope
-        )
-        self.current_scope = block_scope
         for eachnode in node.statement_nodes:
             self.visit(eachnode)
-        self.current_scope = self.current_scope.enclosing_scope
         # self.log(f'LEAVE scope: {block_name}')
 
     def visit_Var_Node(self, node):
         # var is right-value
-        symbol = self.current_scope.lookup(node.value)
-        var_offset = symbol.offset
+        var_offset = node.symbol.offset
         print(f"  lea {var_offset}(%rbp), %rax")
         # right-value
         print(f"  mov (%rax), %rax")
 
 
     def visit_VarDecl_Node(self, node):
-        global offset
-        var_name = node.var_node.value
-        var_type = node.type_node.value
-        offset += 8       # accumulation of the size of vars
-        var_offset = -offset
-        var_symbol = Var_Symbol(var_name, var_type, var_offset)
-        self.current_scope.insert(var_symbol)
-
+        pass
 
     def visit_FormalParam_Node(self, node):
-        global offset
-        parameter_name = node.parameter_node.value
-        parameter_type = node.type_node.value
-        offset += 8  # accumulation of the size of vars
-        parameter_offset = -offset
-        parameter_symbol = Parameter_Symbol(parameter_name, parameter_type, parameter_offset)
-        self.current_scope.insert(parameter_symbol)
+        pass
 
     def visit_FunctionCall_Node(self, node):
         nparams = 0
@@ -1064,8 +1028,7 @@ class Codegenerator(NodeVisitor):
 
     def visit_FunctionDef_Node(self, node):
         # leon: initialize the offset for each function
-        global offset
-        offset = 0
+        Offset.sum = 0
         print(f"  .text")
         print(f"  .globl {node.function_name}")
         print(f"{node.function_name}:")
@@ -1075,15 +1038,9 @@ class Codegenerator(NodeVisitor):
         stack_size = self.align_to(node.offset, 16)
         print(f"  sub ${stack_size}, %rsp")
 
-        # The purpose is to compute offset for parameters.
-        # Offset for local variables will be computed when visiting block node
-        for eachparam in node.formal_parameters:
-            self.visit(eachparam)
-        # Save passed-by-register arguments to the stack
         i = 0
         for eachparam in node.formal_parameters:
-            symbol = self.current_scope.lookup(eachparam.parameter_node.value)
-            parameter_offset = symbol.offset
+            parameter_offset = eachparam.parameter_symbol.offset
             print(f"  mov %{parameter_registers[i]}, {parameter_offset}(%rbp)")
             i += 1
 
