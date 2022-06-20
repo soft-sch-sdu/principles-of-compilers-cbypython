@@ -20,7 +20,8 @@ assert() {
   expected="$1"
   input="$2"
 
-  python3 cbypython.py "$input" > tmp.s
+  echo "$input" | python3 cbypython.py - > tmp.s || exit
+  #  python3 cbypython.py "$input" > tmp.s
   gcc -o tmp tmp.s tmp2.o
   ./tmp
   actual="$?"
@@ -78,6 +79,5 @@ assert 5 'int main() {if(1>2) then return 3; else return 5;}'
 assert 3 'int main() {if(1<2) then ; return 3;}'
 assert 3 'int main() {if(1>2) then return 5; else ; return 3;}'
 assert 6 'int main() {myprint(); return 6; }'
-
 
 echo OK

@@ -15,16 +15,28 @@ class Offset:
 class Count():
     i = 0
 
+# The input source file can be opened in any time,
+# to show error
+class Inputfile():
+    buffer = []
+    name = ''
+
 class ErrorCode(Enum):
     UNEXPECTED_TOKEN = 'Unexpected token'
 
 
 class Error(Exception):
-    def __init__(self, error_code=None, token=None, message=None):
-        self.error_code = error_code
-        self.token = token
-        # add exception class name before the message
-        self.message = f'{self.__class__.__name__}: {message}'
+    lineno = 1
+    column = 1
+
+    @classmethod
+    def show_error_at(self, lineno, pos, error_list='some error'):
+        line = Inputfile.buffer[lineno - 1]
+        print(f"{Inputfile.name}:line {lineno}  --->", file=sys.stderr)
+        print(f"{line.rstrip()}", file=sys.stderr)
+        print("%{pos}s".format(pos=pos) % "^", end=' ', file=sys.stderr)
+        print(f"{error_list}", file=sys.stderr)
+        sys.exit(1)
 
 
 class LexerError(Error):
@@ -85,9 +97,12 @@ class TokenType(Enum):
         return cls._value2member_map_
 
 class Token:
-    def __init__(self, type, value):
+    def __init__(self, type, value, lineno=None, column=None, width=None):
         self.type = type
         self.value = value
+        self.lineno = lineno
+        self.column = column
+        self.width = width
 
 
 class Lexer:
@@ -98,22 +113,21 @@ class Lexer:
         self.pos = 0
         self.current_char = self.text[self.pos]
         # # list of tokens
-        # self.tokens = []
-
-    def verror_at(self, error_list='some error'):
-        print(f"{self.text}", file=sys.stderr)
-        print("%{pos}s".format(pos=self.pos+1) % "^", end=' ', file=sys.stderr)
-        print(f"{error_list}", file=sys.stderr)
-        sys.exit(1)
-
+        self.tokens = []
 
     def advance(self):
         """Advance the `pos` pointer and set the `current_char` variable."""
+        if self.current_char == '\n':
+            Error.lineno += 1
+            Error.column = 0
+
         self.pos += 1
         if self.pos > len(self.text) - 1:
             self.current_char = None  # Indicates end of input
         else:
             self.current_char = self.text[self.pos]
+            Error.column += 1
+
 
     def skip_whitespace(self):
         while self.current_char is not None and self.current_char.isspace():
@@ -131,6 +145,7 @@ class Lexer:
 
         # Create a new token
         token = Token(type=None, value=None)
+        old_column = Error.column
 
         result = ''
         while self.current_char is not None and self.current_char.isdigit():
@@ -139,6 +154,9 @@ class Lexer:
 
         token.type = TokenType.TK_INTEGER_CONST
         token.value = int(result)
+        token.lineno = Error.lineno
+        token.column = Error.column
+        token.width = Error.column - old_column
         return token
 
 
@@ -169,6 +187,9 @@ class Lexer:
 
             # Identifier(Beginning with a - z or A - Z or _, not digits, not punctutors other than _)
             if (self._is_ident1(self.current_char)):
+                # Create a new token
+                token = Token(type=None, value=None)
+                old_column = Error.column
                 result = self.current_char
                 self.advance()
                 while (self._is_ident2(self.current_char)):
@@ -177,98 +198,94 @@ class Lexer:
                 # if keyword, not common identifier
                 if result in TokenType.members():
                     # get enum member by value, e.g.
-                    token_type = TokenType(result)
-                    # create a token
-                    token = Token(
-                        type=token_type,
-                        value=token_type.value,  # e.g. 'return', etc
-                    )
+                    token.type = TokenType(result)
+                    token.value = token.type.value  # e.g. 'return', etc
+                    token.lineno = Error.lineno
+                    token.column = Error.column
+                    token.width = Error.column - old_column
                     return token
                 # if not keyword, but identifier
                 else:
-                    token = Token(
-                        type=TokenType.TK_IDENT,
-                        value=result
-                    )
+                    token.type = TokenType.TK_IDENT
+                    token.value = result
+                    token.lineno = Error.lineno
+                    token.column = Error.column
+                    token.width = Error.column - old_column
                     return token
 
             # Punctuators
             # two-characters punctuator
             if self.read_punct(self.text) == 2:
-                token_type = TokenType(self.text[self.pos:self.pos+2])
+                # Create a new token
+                token = Token(type=None, value=None)
                 # create a token with two-characters lexeme as its value
-                token = Token(
-                    type=token_type,
-                    value=token_type.value,  # e.g. '!=', '==', etc
-                )
+                token.type = TokenType(self.text[self.pos:self.pos+2])
+                token.value=token_type.value,  # e.g. '!=', '==', etc
+                token.lineno = Error.lineno
+                token.column = Error.column
+                token.width = 2
                 self.advance()
                 self.advance()
                 return token
             # single-character punctuator
             elif self.current_char in TokenType.members():
-               # get enum member by value, e.g.
+                # Create a new token
+                token = Token(type=None, value=None)
+                # get enum member by value, e.g.
                 # TokenType('+') --> TokenType.PLUS
-                token_type = TokenType(self.current_char)
-                # create a token with a single-character lexeme as its value
-                token = Token(
-                    type=token_type,
-                    value=token_type.value,  # e.g. '+', '-', etc
-                )
+                 # create a token with a single-character lexeme as its value
+                token.type = TokenType(self.current_char)
+                token.value=token.type.value,  # e.g. '+', '-', etc
+                token.lineno = Error.lineno
+                token.column = Error.column
+                token.width = 1
                 self.advance()
                 return token
             # no enum member with value equal to self.current_char
             else:
-                self.verror_at("invalid token")
+                Error.show_error_at(Error.lineno, Error.column, "invalid token")
 
         # EOF (end-of-file) token indicates that there is no more
         # input left for lexical analysis
         return Token(type=TokenType.TK_EOF, value=None)
 
 
-    def print_all_tokens(self):
+    def gather_all_tokens(self):
         token = self.get_next_token()
+        self.tokens.append(token)
         while token.type != TokenType.TK_EOF:
-            print(token.value)
             token = self.get_next_token()
-
+            self.tokens.append(token)
+        return self.tokens
 
 ##################################################################################################
 #
 #   AST_Node type:
-#   UnaryOp_Node         : +, -
-#   BinaryOp_Node        : +, -, *, /, <, <=, >, >=, ==, !=
-#   Num_Node             : num
 #
 ##################################################################################################
 
 class AST_Node:
-    def __init__(self):
-        self.next = None
-
+    pass
 
 class UnaryOp_Node(AST_Node):
     def __init__(self, op, right):
-        self.next = None
         self.token = self.op = op
         self.right = right
 
 class If_Node(AST_Node):
     def __init__(self, condition, then_statement, else_statement):
-        self.next = None
         self.condition = condition
         self.then_statement = then_statement
         self.else_statement = else_statement
 
 class Return_Node(AST_Node):
     def __init__(self, tok, right, function_name):
-        self.next = None
         self.token = tok
         self.right = right
         self.function_name = function_name
 
 class Block_Node(AST_Node):
     def __init__(self, ltok, rtok, statement_nodes):
-        self.next = None
         self.ltoken = ltok
         self.rtoken = rtok
         self.statement_nodes = statement_nodes
@@ -276,7 +293,6 @@ class Block_Node(AST_Node):
 
 class BinaryOp_Node(AST_Node):
     def __init__(self, left, op, right):
-        self.next = None
         self.left = left
         self.token = self.op = op
         self.right = right
@@ -284,14 +300,12 @@ class BinaryOp_Node(AST_Node):
 
 class Assign_Node(AST_Node):
     def __init__(self, left, op, right):
-        self.next = None
         self.left = left
         self.token = self.op = op
         self.right = right
 
 class FunctionCall_Node(AST_Node):
     def __init__(self, function_name, actual_parameter_nodes, token):
-        self.next = None
         self.function_name = function_name
         self.actual_parameter_nodes = actual_parameter_nodes
         self.token = token
@@ -299,7 +313,6 @@ class FunctionCall_Node(AST_Node):
 
 class Num_Node(AST_Node):
     def __init__(self, token):
-        self.next = None
         self.token = token
         self.value = token.value
 
@@ -307,7 +320,6 @@ class Num_Node(AST_Node):
 class Var_Node(AST_Node):
     """The Var node is constructed out of ID token."""
     def __init__(self, token):
-        self.next = None
         self.token = token
         self.value = token.value
         self.symbol = None
@@ -321,7 +333,6 @@ class VarDecl_Node(AST_Node):
     def __init__(self, type_node, var_node):
         self.type_node = type_node
         self.var_node = var_node
-
 
 
 class FormalParam_Node(AST_Node):
@@ -455,7 +466,7 @@ class Parser:
                 self.eat(TokenType.TK_MUL)
                 node = BinaryOp_Node(left=node, op=token, right=self.unary())
                 continue
-            if self.current_token.type == TokenType.TK_DIV:
+            elif self.current_token.type == TokenType.TK_DIV:
                 self.eat(TokenType.TK_DIV)
                 node = BinaryOp_Node(left=node, op=token, right=self.unary())
                 continue
@@ -470,7 +481,7 @@ class Parser:
                 self.eat(TokenType.TK_PLUS)
                 node = BinaryOp_Node(left=node, op=token, right=self.mul_div())
                 continue
-            if self.current_token.type == TokenType.TK_MINUS:
+            elif self.current_token.type == TokenType.TK_MINUS:
                 self.eat(TokenType.TK_MINUS)
                 node = BinaryOp_Node(left=node, op=token, right=self.mul_div())
                 continue
@@ -485,15 +496,15 @@ class Parser:
                 self.eat(TokenType.TK_LT)
                 node = BinaryOp_Node(left=node, op=token, right=self.add_sub())
                 continue
-            if self.current_token.type == TokenType.TK_LE:
+            elif self.current_token.type == TokenType.TK_LE:
                 self.eat(TokenType.TK_LE)
                 node = BinaryOp_Node(left=node, op=token, right=self.add_sub())
                 continue
-            if self.current_token.type == TokenType.TK_GT:
+            elif self.current_token.type == TokenType.TK_GT:
                 self.eat(TokenType.TK_GT)
                 node = BinaryOp_Node(left=node, op=token, right=self.add_sub())
                 continue
-            if self.current_token.type == TokenType.TK_GE:
+            elif self.current_token.type == TokenType.TK_GE:
                 self.eat(TokenType.TK_GE)
                 node = BinaryOp_Node(left=node, op=token, right=self.add_sub())
                 continue
@@ -509,7 +520,7 @@ class Parser:
                 self.eat(TokenType.TK_EQ)
                 node = BinaryOp_Node(left=node, op=token, right=self.relational())
                 continue
-            if self.current_token.type == TokenType.TK_NE:
+            elif self.current_token.type == TokenType.TK_NE:
                 self.eat(TokenType.TK_NE)
                 node = BinaryOp_Node(left=node, op=token, right=self.relational())
                 continue
@@ -537,7 +548,10 @@ class Parser:
             self.eat(TokenType.TK_SEMICOLON)
         else:
             node = self.expression()
-            self.eat(TokenType.TK_SEMICOLON)
+            if self.current_token.type == TokenType.TK_SEMICOLON:
+                self.eat(TokenType.TK_SEMICOLON)
+            else:
+                Error.show_error_at(token.lineno, token.column-token.width+1, "expect \";\"")
         return node
 
 
@@ -554,10 +568,10 @@ class Parser:
                                   function_name = self.current_function_name)
             return node
         # block
-        if token.type == TokenType.TK_LBRACE:
+        elif token.type == TokenType.TK_LBRACE:
             return self.block()
         # "if" "(" expression ")" statement ("else" statement)?
-        if token.type == TokenType.TK_IF:
+        elif token.type == TokenType.TK_IF:
             condition = None
             then_statement = None
             else_statement = None
@@ -573,8 +587,9 @@ class Parser:
                         self.eat(TokenType.TK_ELSE)
                         else_statement = self.statement()
             return If_Node(condition, then_statement, else_statement)
-        # expression-statement
-        return self.expression_statement()
+        else:
+            # expression-statement
+            return self.expression_statement()
 
     # type_specification = int  //TODO: REAL
     def type_specification(self):
@@ -606,7 +621,8 @@ class Parser:
     # compound_statement = (variable_declaration | statement)*
     def compound_statement(self):
         statement_nodes = []
-        while self.current_token.type != TokenType.TK_RBRACE:
+        while self.current_token.type != TokenType.TK_RBRACE and \
+                self.current_token.type != TokenType.TK_EOF:
             if self.current_token.type == TokenType.TK_INT:
                 variable_nodes = self.variable_declaration()
                 for eachnode in variable_nodes:
@@ -662,7 +678,10 @@ class Parser:
             self.eat(TokenType.TK_RPAREN)
 
         self.current_function_name = function_name
-        block_node = self.block()
+        if self.current_token.type == TokenType.TK_LBRACE:
+            block_node = self.block()
+        else:
+            Error.show_error_at(token.lineno, self.current_token.column-self.current_token.width, f"expect \"{TokenType.TK_LBRACE.value}\"")
 
         return FunctionDef_Node(type_node, function_name, formal_params, block_node)
 
@@ -701,7 +720,7 @@ class Parser:
         if self.current_token.type != TokenType.TK_EOF:
             self.error(
                 error_code=ErrorCode.UNEXPECTED_TOKEN,
-                token=self.current_token,
+                token=self.current_token
             )
         return function_definition_nodes
 
@@ -789,6 +808,8 @@ class SemanticAnalyzer(NodeVisitor):
         if _SHOULD_LOG_SCOPE:
             print(msg)
 
+
+
     def visit_UnaryOp_Node(self, node):
         pass
 
@@ -845,7 +866,6 @@ class SemanticAnalyzer(NodeVisitor):
     def visit_VarDecl_Node(self, node):
         var_name = node.var_node.value
         var_type = node.type_node.value
-        # leon
         Offset.sum += 8
         var_offset = -Offset.sum
         var_symbol = Var_Symbol(var_name, var_type, var_offset)
@@ -1070,16 +1090,25 @@ class Codegenerator(NodeVisitor):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='cbypython - Simple C Compiler'
+        description='cbypython - Simple C-like Compiler'
     )
-    parser.add_argument('input', help='C source file')
-
+    parser.add_argument('inputfile', help='C-like source file')
     args = parser.parse_args()
-    
-    p = args.input
-    lexer = Lexer(p)
 
-    # lexer.print_all_tokens()
+    Inputfile.name = args.inputfile
+    if Inputfile.name == '-':
+        Inputfile.buffer = sys.stdin.readlines()
+    else:
+        Inputfile.buffer = open(args.inputfile, 'r').readlines()
+
+    Inputfile_plain_text = ''
+    for line in Inputfile.buffer:
+        Inputfile_plain_text += line
+
+    lexer = Lexer(Inputfile_plain_text)
+
+    # for eachtok in lexer.gather_all_tokens():
+    #     print(eachtok.value)
 
     parser = Parser(lexer)
     tree = parser.parse()
