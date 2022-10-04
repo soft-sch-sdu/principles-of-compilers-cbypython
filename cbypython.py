@@ -68,10 +68,6 @@ class TokenType(Enum):
     TK_NEG           = 'unary-'
     TK_LT            = '<'
     TK_GT            = '>'
-    TK_EQ            = '=='
-    TK_NE            = '!='
-    TK_GE            = '>='
-    TK_LE            = '<='
     TK_LPAREN        = '('
     TK_RPAREN        = ')'
     TK_LBRACE        = '{'
@@ -80,21 +76,27 @@ class TokenType(Enum):
     TK_RBRACK        = ']'
     TK_COMMA         = ','
     TK_SEMICOLON     = ';'
+    TK_ASSIGN        = '='
+    # double-character token types
+    TK_EQ            = '=='
+    TK_NE            = '!='
+    TK_GE            = '>='
+    TK_LE            = '<='
     # block of reserved words
     TK_RETURN        = 'return'
     TK_INT           = 'int'
     TK_IF            = 'if'
     TK_THEN          = 'then'
     TK_ELSE          = 'else'
+    TK_WHILE         = 'while'
     # misc
     TK_IDENT         = 'IDENT'
     TK_INTEGER_CONST = 'INTEGER_CONST'
-    TK_ASSIGN        = '='
     TK_EOF           = 'EOF'
 
     @classmethod
     def members(cls):
-        return cls._value2member_map_
+        return [item.value for item in TokenType]
 
 class Token:
     def __init__(self, type, value, lineno=None, column=None, width=None):
@@ -220,7 +222,7 @@ class Lexer:
                 token = Token(type=None, value=None)
                 # create a token with two-characters lexeme as its value
                 token.type = TokenType(self.text[self.pos:self.pos+2])
-                token.value=token_type.value,  # e.g. '!=', '==', etc
+                token.value=token.type.value,  # e.g. '!=', '==', etc
                 token.lineno = Error.lineno
                 token.column = Error.column
                 token.width = 2
@@ -231,9 +233,7 @@ class Lexer:
             elif self.current_char in TokenType.members():
                 # Create a new token
                 token = Token(type=None, value=None)
-                # get enum member by value, e.g.
-                # TokenType('+') --> TokenType.PLUS
-                 # create a token with a single-character lexeme as its value
+                # create a token with a single-character lexeme as its value
                 token.type = TokenType(self.current_char)
                 token.value=token.type.value,  # e.g. '+', '-', etc
                 token.lineno = Error.lineno
@@ -277,6 +277,11 @@ class If_Node(AST_Node):
         self.condition = condition
         self.then_statement = then_statement
         self.else_statement = else_statement
+
+class While_Node(AST_Node):
+    def __init__(self, condition, statement):
+        self.condition = condition
+        self.statement = statement
 
 class Return_Node(AST_Node):
     def __init__(self, tok, right, function_name):
@@ -559,6 +564,7 @@ class Parser:
     #             | "return" expression-statement
     #             | block
     #             | "if" "(" expression ")" statement ("else" statement)?
+    #             | "while" "(" expression ")" statement
     def statement(self):
         token = self.current_token
         # "return" expression-statement
@@ -587,6 +593,16 @@ class Parser:
                         self.eat(TokenType.TK_ELSE)
                         else_statement = self.statement()
             return If_Node(condition, then_statement, else_statement)
+        elif token.type == TokenType.TK_WHILE:
+            condition = None
+            statement = None
+            self.eat(TokenType.TK_WHILE)
+            if self.current_token.type == TokenType.TK_LPAREN:
+                self.eat(TokenType.TK_LPAREN)
+                condition = self.expression()
+                self.eat(TokenType.TK_RPAREN)
+                statement = self.statement()
+            return While_Node(condition, statement)
         else:
             # expression-statement
             return self.expression_statement()
@@ -834,6 +850,11 @@ class SemanticAnalyzer(NodeVisitor):
         if node.else_statement is not None:
             self.visit(node.else_statement)
 
+    def visit_While_Node(self, node):
+        self.visit(node.condition)
+        if node.statement is not None:
+            self.visit(node.statement)
+
     def visit_Block_Node(self, node):
         block_name= self.current_scope.scope_name + f' block' + \
                                    f"{self.current_scope.scope_level + 1}"
@@ -1014,6 +1035,16 @@ class Codegenerator(NodeVisitor):
             self.visit(node.else_statement)
         print(f".L.end.{Count.i}:")
 
+    def visit_While_Node(self, node):
+        Count.i += 1
+        print(f".L.condition.{Count.i}:")
+        self.visit(node.condition)
+        print(f"  cmp $0, %rax")
+        print(f"  je  .L.end.{Count.i}")
+        if node.statement is not None:
+            self.visit(node.statement)
+        print(f"  jmp .L.condition.{Count.i}")
+        print(f".L.end.{Count.i}:")
 
     def visit_Block_Node(self, node):
         for eachnode in node.statement_nodes:
@@ -1101,21 +1132,27 @@ def main():
     else:
         Inputfile.buffer = open(args.inputfile, 'r').readlines()
 
+    # 读入源程序
+    # Inputfile.buffer = open("tmpc", 'r').readlines()
     Inputfile_plain_text = ''
     for line in Inputfile.buffer:
         Inputfile_plain_text += line
 
+    # 词法分析
     lexer = Lexer(Inputfile_plain_text)
 
     # for eachtok in lexer.gather_all_tokens():
     #     print(eachtok.value)
 
+    # 语法分析
     parser = Parser(lexer)
     tree = parser.parse()
 
+    # 语义分析
     semantic_analyzer = SemanticAnalyzer()
     semantic_analyzer.semantic_analyze(tree)
 
+    # 代码生成
     code_generator= Codegenerator()
     code_generator.code_generate(tree)
 
