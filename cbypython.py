@@ -77,14 +77,18 @@ class TokenType(Enum):
     TK_COMMA         = ','
     TK_SEMICOLON     = ';'
     TK_ASSIGN        = '='
+    TK_NOT            = '!'
     # double-character token types
+    TK_AND         = '&&'
+    TK_OR            = '||'
     TK_EQ            = '=='
     TK_NE            = '!='
     TK_GE            = '>='
     TK_LE            = '<='
     # block of reserved words
-    TK_RETURN        = 'return'
     TK_INT           = 'int'
+    TK_BOOL          = 'bool'
+    TK_RETURN        = 'return'
     TK_IF            = 'if'
     TK_THEN          = 'then'
     TK_ELSE          = 'else'
@@ -92,6 +96,8 @@ class TokenType(Enum):
     # misc
     TK_IDENT         = 'IDENT'
     TK_INTEGER_CONST = 'INTEGER_CONST'
+    TK_BOOL_CONST_TRUE  = 'true'
+    TK_BOOL_CONST_FALSE = 'false'
     TK_EOF           = 'EOF'
 
     @classmethod
@@ -164,7 +170,9 @@ class Lexer:
 
     # Read a punctuator token from p and returns
     def read_punct(self, p):
-        if p.startswith("==", self.pos) or \
+        if p.startswith("&&", self.pos) or \
+            p.startswith("||", self.pos) or \
+            p.startswith("==", self.pos) or \
             p.startswith("!=", self.pos) or \
             p.startswith("<=", self.pos) or \
             p.startswith(">=", self.pos):
@@ -444,12 +452,18 @@ class Parser:
             # Variable
             return Var_Node(token)
 
-        # num
+        # num (including bool type constants: true and false)
         if token.type == TokenType.TK_INTEGER_CONST:
             self.eat(TokenType.TK_INTEGER_CONST)
             return Num_Node(token)
+        elif token.type == TokenType.TK_BOOL_CONST_TRUE:
+            self.eat(TokenType.TK_BOOL_CONST_TRUE)
+            return Num_Node(token)
+        elif token.type == TokenType.TK_BOOL_CONST_FALSE:
+            self.eat(TokenType.TK_BOOL_CONST_FALSE)
+            return Num_Node(token)
 
-    #unary = ("+" | "-") unary
+    #unary = ("+" | "-" | "!") unary
     #        | primary
     def unary(self):
         token = self.current_token
@@ -458,6 +472,9 @@ class Parser:
             return UnaryOp_Node(op=token, right=self.unary())
         elif token.type == TokenType.TK_MINUS:
             self.eat(TokenType.TK_MINUS)
+            return UnaryOp_Node(op=token, right=self.unary())
+        elif token.type == TokenType.TK_NOT:
+            self.eat(TokenType.TK_NOT)
             return UnaryOp_Node(op=token, right=self.unary())
         else:
             return self.primary()
@@ -531,9 +548,25 @@ class Parser:
                 continue
             return node
 
-    # assign = equality ("=" assign)?
-    def assign(self):
+    # logic = equality ("&&" equality | "||" equality)*
+    def logic(self):
         node = self.equality()
+        while True:
+            token = self.current_token
+            if self.current_token.type == TokenType.TK_AND:
+                self.eat(TokenType.TK_AND)
+                node = BinaryOp_Node(left=node, op=token, right=self.equality())
+                continue
+            elif self.current_token.type == TokenType.TK_OR:
+                self.eat(TokenType.TK_OR)
+                node = BinaryOp_Node(left=node, op=token, right=self.equality())
+                continue
+            return node
+
+    #assign = logic ("=" assign)?
+    def assign(self):
+        #node = self.equality()
+        node = self.logic()
         token = self.current_token
         if token.type == TokenType.TK_ASSIGN:
             self.eat(TokenType.TK_ASSIGN)
@@ -607,11 +640,13 @@ class Parser:
             # expression-statement
             return self.expression_statement()
 
-    # type_specification = int  //TODO: REAL
+    # type_specification = int | bool  //TODO: REAL
     def type_specification(self):
         token = self.current_token
         if self.current_token.type == TokenType.TK_INT:
             self.eat(TokenType.TK_INT)
+        elif self.current_token.type == TokenType.TK_BOOL:
+            self.eat(TokenType.TK_BOOL)
         # elif self.current_token.type == TokenType.REAL:
         #     self.eat(TokenType.REAL)
         node = Type(token)
@@ -639,7 +674,8 @@ class Parser:
         statement_nodes = []
         while self.current_token.type != TokenType.TK_RBRACE and \
                 self.current_token.type != TokenType.TK_EOF:
-            if self.current_token.type == TokenType.TK_INT:
+            if self.current_token.type == TokenType.TK_INT or \
+                    self.current_token.type == TokenType.TK_BOOL:
                 variable_nodes = self.variable_declaration()
                 for eachnode in variable_nodes:
                     statement_nodes.append(eachnode)
@@ -709,17 +745,19 @@ class Parser:
         function_definition = type_specification identifier "(" formal_parameters? ")" block
         formal_parameters = formal_parameter ("," formal_parameter)*
         formal_parameter = type_specification identifier
-        type_specification = "int"
+        type_specification = "int" | "bool"
         block = "{" compound_statement "}"
         compound_statement = (variable_declaration | statement)*
         statement = expression-statement
                     | "return" expression-statement
                     | block
                     | "if" "(" expression ")" statement ("else" statement)?
+                    | "while" "(" expression ")" statement
         variable_declaration = type_specification (identifier ("=" expr)? ("," identifier ("=" expr)?)*)? ";"
         expression-statement = expression? ";"
         expression = assign
-        assign = equality ("=" assign)?
+        assign = logic ("=" assign)?
+        logic = equality ("&&" equality | "||" equality)*
         equality = relational ("==" relational | "! =" relational)*
         relational = add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
         add_sub = mul_div ("+" mul_div | "-" mul_div)*
@@ -958,78 +996,88 @@ class Codegenerator(NodeVisitor):
     def visit_UnaryOp_Node(self, node):
         self.visit(node.right)
         if node.op.type == TokenType.TK_MINUS:
-            print(f"  neg %rax")
+            print(f"    neg %rax")
+        elif node.op.type == TokenType.TK_NOT:
+            print(f"    not %rax")
 
     def visit_Return_Node(self, node):
         self.visit(node.right)
         if node.token.type == TokenType.TK_RETURN:
-            print(f"  jmp .{node.function_name}.return")
+            print(f"    jmp .{node.function_name}.return")
 
     def visit_BinaryOp_Node(self, node):
         self.visit(node.right)
-        print(f"  push %rax")
+        print(f"    push %rax")
         self.visit(node.left)
-        print(f"  pop %rdi")
+        print(f"    pop %rdi")
         if node.op.type == TokenType.TK_PLUS:
-            print(f"  add %rdi, %rax")
+            print(f"    add %rdi, %rax")
         elif node.op.type == TokenType.TK_MINUS:
-            print(f"  sub %rdi, %rax")
+            print(f"    sub %rdi, %rax")
         elif node.op.type == TokenType.TK_MUL:
-            print(f"  imul %rdi, %rax")
+            print(f"    imul %rdi, %rax")
         elif node.op.type == TokenType.TK_DIV:
-            print(f"  cqo")
-            print(f"  idiv %rdi")
+            print(f"    cqo")
+            print(f"    idiv %rdi")
         elif node.op.type == TokenType.TK_EQ:
-            print(f"  cmp %rdi, %rax")
-            print(f"  sete %al")
-            print(f"  movzb %al, %rax")
+            print(f"    cmp %rdi, %rax")
+            print(f"    sete %al")
+            print(f"    movzb %al, %rax")
         elif node.op.type == TokenType.TK_NE:
-            print(f"  cmp %rdi, %rax")
-            print(f"  setne %al")
-            print(f"  movzb %al, %rax")
+            print(f"    cmp %rdi, %rax")
+            print(f"    setne %al")
+            print(f"    movzb %al, %rax")
         elif node.op.type == TokenType.TK_LT:
-            print(f"  cmp %rdi, %rax")
-            print(f"  setl %al")
-            print(f"  movzb %al, %rax")
+            print(f"    cmp %rdi, %rax")
+            print(f"    setl %al")
+            print(f"    movzb %al, %rax")
         elif node.op.type == TokenType.TK_GT:
-            print(f"  cmp %rdi, %rax")
-            print(f"  setg %al")
-            print(f"  movzb %al, %rax")
+            print(f"    cmp %rdi, %rax")
+            print(f"    setg %al")
+            print(f"    movzb %al, %rax")
         elif node.op.type == TokenType.TK_LE:
-            print(f"  cmp %rdi, %rax")
-            print(f"  setle %al")
-            print(f"  movzb %al, %rax")
+            print(f"    cmp %rdi, %rax")
+            print(f"    setle %al")
+            print(f"    movzb %al, %rax")
         elif node.op.type == TokenType.TK_GE:
-            print(f"  cmp %rdi, %rax")
-            print(f"  setge %al")
-            print(f"  movzb %al, %rax")
-
+            print(f"    cmp %rdi, %rax")
+            print(f"    setge %al")
+            print(f"    movzb %al, %rax")
+        elif node.op.type == TokenType.TK_AND:
+            print(f"    and %rdi, %rax")
+        elif node.op.type == TokenType.TK_OR:
+            print(f"    or %rdi, %rax")
 
     def visit_Assign_Node(self, node):
         if node.left.token.type == TokenType.TK_IDENT:
             # var is left-value
             var_offset = node.left.symbol.offset
-            print(f"  lea {var_offset}(%rbp), %rax")
+            print(f"    lea {var_offset}(%rbp), %rax")
             # left-value
-            print(f"  push %rax")
+            print(f"    push %rax")
 
             self.visit(node.right)
-            print(f"  pop %rdi")
-            print(f"  mov %rax, (%rdi)")
+            print(f"    pop %rdi")
+            print(f"    mov %rax, (%rdi)")
         else:
             error("not an lvalue");
 
     def visit_Num_Node(self, node):
-        print(f"  mov ${node.value}, %rax")
+        if node.value == 'true': # like c, 1 stands for true
+            print(f"    mov $1, %rax")
+        elif node.value == 'false': # like c, 0 stands for false
+            print(f"    mov $0, %rax")
+        else:
+            print(f"    mov ${node.value}, %rax")
 
     def visit_If_Node(self, node):
         Count.i += 1
         self.visit(node.condition)
-        print(f"  cmp $0, %rax")
-        print(f"  je  .L.else.{Count.i}")
+        print(f"    cmp $0, %rax")
+        print(f"    je  .L.else.{Count.i}")
         if node.then_statement is not None:
             self.visit(node.then_statement)
-        print(f"  jmp .L.end.{Count.i}")
+        print(f"    jmp .L.end.{Count.i}")
         print(f".L.else.{Count.i}:")
         if node.else_statement is not None:
             self.visit(node.else_statement)
@@ -1039,11 +1087,11 @@ class Codegenerator(NodeVisitor):
         Count.i += 1
         print(f".L.condition.{Count.i}:")
         self.visit(node.condition)
-        print(f"  cmp $0, %rax")
-        print(f"  je  .L.end.{Count.i}")
+        print(f"    cmp $0, %rax")
+        print(f"    je  .L.end.{Count.i}")
         if node.statement is not None:
             self.visit(node.statement)
-        print(f"  jmp .L.condition.{Count.i}")
+        print(f"    jmp .L.condition.{Count.i}")
         print(f".L.end.{Count.i}:")
 
     def visit_Block_Node(self, node):
@@ -1054,9 +1102,9 @@ class Codegenerator(NodeVisitor):
     def visit_Var_Node(self, node):
         # var is right-value
         var_offset = node.symbol.offset
-        print(f"  lea {var_offset}(%rbp), %rax")
+        print(f"    lea {var_offset}(%rbp), %rax")
         # right-value
-        print(f"  mov (%rax), %rax")
+        print(f"    mov (%rax), %rax")
 
 
     def visit_VarDecl_Node(self, node):
@@ -1069,30 +1117,30 @@ class Codegenerator(NodeVisitor):
         nparams = 0
         for eachnode in node.actual_parameter_nodes:
             self.visit(eachnode)
-            print(f"  push %rax")
+            print(f"    push %rax")
             nparams += 1
         for i in range(nparams, 0, -1):
-            print(f"  pop %{parameter_registers[i-1]}")
+            print(f"    pop %{parameter_registers[i-1]}")
 
-        print(f"  mov $0, %rax")
-        print(f"  call {node.function_name}")
+        print(f"    mov $0, %rax")
+        print(f"    call {node.function_name}")
 
     def visit_FunctionDef_Node(self, node):
         # leon: initialize the offset for each function
         Offset.sum = 0
-        print(f"  .text")
-        print(f"  .globl {node.function_name}")
+        print(f"    .text")
+        print(f"    .globl {node.function_name}")
         print(f"{node.function_name}:")
         # Prologue
-        print(f"  push %rbp")
-        print(f"  mov %rsp, %rbp")
+        print(f"    push %rbp")
+        print(f"    mov %rsp, %rbp")
         stack_size = self.align_to(node.offset, 16)
-        print(f"  sub ${stack_size}, %rsp")
+        print(f"    sub ${stack_size}, %rsp")
 
         i = 0
         for eachparam in node.formal_parameters:
             parameter_offset = eachparam.parameter_symbol.offset
-            print(f"  mov %{parameter_registers[i]}, {parameter_offset}(%rbp)")
+            print(f"    mov %{parameter_registers[i]}, {parameter_offset}(%rbp)")
             i += 1
 
         # Visit function block
@@ -1100,9 +1148,9 @@ class Codegenerator(NodeVisitor):
 
         print(f".{node.function_name}.return:")
         # Epilogue
-        print(f"  mov %rbp, %rsp")
-        print(f"  pop %rbp")
-        print(f"  ret")
+        print(f"    mov %rbp, %rsp")
+        print(f"    pop %rbp")
+        print(f"    ret")
 
 
     def code_generate(self, tree):
