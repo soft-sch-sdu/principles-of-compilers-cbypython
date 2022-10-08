@@ -78,7 +78,6 @@ assert 5 'int main() {if(0) then return 3; else return 5;}'
 assert 5 'int main() {if(1>2) then return 3; else return 5;}'
 assert 3 'int main() {if(1<2) then ; return 3;}'
 assert 3 'int main() {if(1>2) then return 5; else ; return 3;}'
-assert 6 'int main() {int i; int j; j =0; i = 3; while(i>=1) { j = j + i; i = i -1;} return j;}'
 assert 6 'int main() {myprint(); return 6; }'
 
 assert 3 'int main() {bool b; b= (1<2) || (1>2) ; if(b) then return 3;}'

@@ -2,6 +2,7 @@ import argparse
 import string
 import sys
 from enum import Enum
+from abc import ABCMeta, abstractmethod
 
 
 _SHOULD_LOG_SCOPE = False  # see '--scope' command line option
@@ -49,8 +50,6 @@ class ParserError(Error):
 
 class SemanticError(Error):
     pass
-
-
 
 
 ##################################################################################################
@@ -170,12 +169,12 @@ class Lexer:
 
     # Read a punctuator token from p and returns
     def read_punct(self, p):
-        if p.startswith("&&", self.pos) or \
-            p.startswith("||", self.pos) or \
-            p.startswith("==", self.pos) or \
+        if p.startswith("==", self.pos) or \
             p.startswith("!=", self.pos) or \
             p.startswith("<=", self.pos) or \
-            p.startswith(">=", self.pos):
+            p.startswith(">=", self.pos) or \
+            p.startswith("&&", self.pos) or \
+            p.startswith("||", self.pos):
             return 2
         return self.current_char in string.punctuation
 
@@ -272,63 +271,79 @@ class Lexer:
 #
 ##################################################################################################
 
-class AST_Node:
-    pass
+class AST_Node(metaclass=ABCMeta):
+    @abstractmethod
+    def accept(self, visitor):
+        pass
 
 class UnaryOp_Node(AST_Node):
     def __init__(self, op, right):
         self.token = self.op = op
         self.right = right
+    def accept(self, visitor):
+        visitor.visit_UnaryOp_Node(self)
 
 class If_Node(AST_Node):
     def __init__(self, condition, then_statement, else_statement):
         self.condition = condition
         self.then_statement = then_statement
         self.else_statement = else_statement
+    def accept(self, visitor):
+        visitor.visit_If_Node(self)
 
 class While_Node(AST_Node):
     def __init__(self, condition, statement):
         self.condition = condition
         self.statement = statement
+    def accept(self, visitor):
+        visitor.visit_While_Node(self)
 
 class Return_Node(AST_Node):
     def __init__(self, tok, right, function_name):
         self.token = tok
         self.right = right
         self.function_name = function_name
+    def accept(self, visitor):
+        visitor.visit_Return_Node(self)
 
 class Block_Node(AST_Node):
     def __init__(self, ltok, rtok, statement_nodes):
         self.ltoken = ltok
         self.rtoken = rtok
         self.statement_nodes = statement_nodes
-
+    def accept(self, visitor):
+        visitor.visit_Block_Node(self)
 
 class BinaryOp_Node(AST_Node):
     def __init__(self, left, op, right):
         self.left = left
         self.token = self.op = op
         self.right = right
-
+    def accept(self, visitor):
+        visitor.visit_BinaryOp_Node(self)
 
 class Assign_Node(AST_Node):
     def __init__(self, left, op, right):
         self.left = left
         self.token = self.op = op
         self.right = right
+    def accept(self, visitor):
+        visitor.visit_Assign_Node(self)
 
 class FunctionCall_Node(AST_Node):
     def __init__(self, function_name, actual_parameter_nodes, token):
         self.function_name = function_name
         self.actual_parameter_nodes = actual_parameter_nodes
         self.token = token
-
+    def accept(self, visitor):
+        visitor.visit_FunctionCall_Node(self)
 
 class Num_Node(AST_Node):
     def __init__(self, token):
         self.token = token
         self.value = token.value
-
+    def accept(self, visitor):
+        visitor.visit_Num_Node(self)
 
 class Var_Node(AST_Node):
     """The Var node is constructed out of ID token."""
@@ -336,24 +351,31 @@ class Var_Node(AST_Node):
         self.token = token
         self.value = token.value
         self.symbol = None
+    def accept(self, visitor):
+        visitor.visit_Var_Node(self)
 
-class Type(AST_Node):
+
+class Type_Node(AST_Node):
     def __init__(self, token):
         self.token = token
         self.value = token.value
+    def accept(self, visitor):
+        visitor.visit_Type_Node(self)
 
 class VarDecl_Node(AST_Node):
     def __init__(self, type_node, var_node):
         self.type_node = type_node
         self.var_node = var_node
-
+    def accept(self, visitor):
+        visitor.visit_VarDecl_Node(self)
 
 class FormalParam_Node(AST_Node):
     def __init__(self, type_node, parameter_node):
         self.type_node = type_node
         self.parameter_node = parameter_node
         self.parameter_symbol = None
-
+    def accept(self, visitor):
+        visitor.visit_FormalParam_Node(self)
 
 class FunctionDef_Node(AST_Node):
     def __init__(self, type_node, function_name, formal_parameters, block_node):
@@ -362,6 +384,10 @@ class FunctionDef_Node(AST_Node):
         self.formal_parameters = formal_parameters
         self.block_node = block_node
         self.offset = 0
+    def accept(self, visitor):
+        visitor.visit_FunctionDef_Node(self)
+
+
 
 ##################################################################################################
 #
@@ -369,14 +395,57 @@ class FunctionDef_Node(AST_Node):
 #
 ##################################################################################################
 
-class NodeVisitor:
-    def visit(self, node):
-        method_name = 'visit_' + type(node).__name__
-        visitor = getattr(self, method_name, self.generic_visit)
-        return visitor(node)
+class NodeVisitor(metaclass=ABCMeta):
+    @abstractmethod
+    def visit_UnaryOp_Node(self, node):
+        pass
+    @abstractmethod
+    def visit_Return_Node(self, node):
+        pass
 
-    def generic_visit(self, node):
-        raise Exception('No visit_{} method'.format(type(node).__name__))
+    @abstractmethod
+    def visit_BinaryOp_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_Assign_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_If_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_While_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_Block_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_Num_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_Var_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_VarDecl_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_FormalParam_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_FunctionDef_Node(self, node):
+        pass
+
+    @abstractmethod
+    def visit_FunctionCall_Node(self, node):
+        pass
 
 
 ##################################################################################################
@@ -463,7 +532,7 @@ class Parser:
             self.eat(TokenType.TK_BOOL_CONST_FALSE)
             return Num_Node(token)
 
-    #unary = ("+" | "-" | "!") unary
+    # unary = ("+" | "-" | "!") unary
     #        | primary
     def unary(self):
         token = self.current_token
@@ -532,7 +601,6 @@ class Parser:
                 continue
             return node
 
-
     # equality = relational ("==" relational | "! =" relational)*
     def equality(self):
         node = self.relational()
@@ -563,14 +631,14 @@ class Parser:
                 continue
             return node
 
-    #assign = logic ("=" assign)?
+    # assign = logic ("=" assign)?
     def assign(self):
-        #node = self.equality()
+        # node = self.equality()
         node = self.logic()
         token = self.current_token
         if token.type == TokenType.TK_ASSIGN:
             self.eat(TokenType.TK_ASSIGN)
-            node = Assign_Node(left=node, op=token, right = self.assign())
+            node = Assign_Node(left=node, op=token, right=self.assign())
         return node
 
     # expression = assign
@@ -589,9 +657,8 @@ class Parser:
             if self.current_token.type == TokenType.TK_SEMICOLON:
                 self.eat(TokenType.TK_SEMICOLON)
             else:
-                Error.show_error_at(token.lineno, token.column-token.width+1, "expect \";\"")
+                Error.show_error_at(token.lineno, token.column - token.width + 1, "expect \";\"")
         return node
-
 
     # statement = expression-statement
     #             | "return" expression-statement
@@ -603,8 +670,8 @@ class Parser:
         # "return" expression-statement
         if token.type == TokenType.TK_RETURN:
             self.eat(TokenType.TK_RETURN)
-            node = Return_Node(tok=token, right = self.expression_statement(),  \
-                                  function_name = self.current_function_name)
+            node = Return_Node(tok=token, right=self.expression_statement(), \
+                               function_name=self.current_function_name)
             return node
         # block
         elif token.type == TokenType.TK_LBRACE:
@@ -649,7 +716,7 @@ class Parser:
             self.eat(TokenType.TK_BOOL)
         # elif self.current_token.type == TokenType.REAL:
         #     self.eat(TokenType.REAL)
-        node = Type(token)
+        node = Type_Node(token)
         return node
 
     # variable_declaration = type_specification (indentifier ("=" expr)? ("," indentifier ("=" expr)?)*)? ";"
@@ -668,7 +735,6 @@ class Parser:
         self.eat(TokenType.TK_SEMICOLON)
         return variable_nodes
 
-
     # compound_statement = (variable_declaration | statement)*
     def compound_statement(self):
         statement_nodes = []
@@ -681,7 +747,7 @@ class Parser:
                     statement_nodes.append(eachnode)
             else:
                 node = self.statement()
-                if node is not None: # abandon "  ;", i.e., null statement
+                if node is not None:  # abandon "  ;", i.e., null statement
                     statement_nodes.append(node)
         return statement_nodes
 
@@ -701,7 +767,6 @@ class Parser:
         parameter_node = Var_Node(self.current_token)
         self.eat(TokenType.TK_IDENT)
         return FormalParam_Node(type_node, parameter_node)
-
 
     # formal_parameters = formal_parameter (, formal_parameter)*
     def formal_parameters(self):
@@ -733,10 +798,10 @@ class Parser:
         if self.current_token.type == TokenType.TK_LBRACE:
             block_node = self.block()
         else:
-            Error.show_error_at(token.lineno, self.current_token.column-self.current_token.width, f"expect \"{TokenType.TK_LBRACE.value}\"")
+            Error.show_error_at(token.lineno, self.current_token.column - self.current_token.width,
+                                f"expect \"{TokenType.TK_LBRACE.value}\"")
 
         return FunctionDef_Node(type_node, function_name, formal_params, block_node)
-
 
     # program = function_definition*
     def parse(self):
@@ -777,8 +842,6 @@ class Parser:
                 token=self.current_token
             )
         return function_definition_nodes
-
-
 
 ##################################################################################################
 #
@@ -857,41 +920,38 @@ class SemanticAnalyzer(NodeVisitor):
         )
         self.current_scope = global_scope
 
-
     def log(self, msg):
         if _SHOULD_LOG_SCOPE:
             print(msg)
-
-
 
     def visit_UnaryOp_Node(self, node):
         pass
 
     def visit_Return_Node(self, node):
-        self.visit(node.right)
+        node.right.accept(self)
 
     def visit_BinaryOp_Node(self, node):
-        self.visit(node.left)
-        self.visit(node.right)
+        node.left.accept(self)
+        node.right.accept(self)
 
     def visit_Assign_Node(self, node):
         # make sure the left side of assign is a varible
         if node.left.token.type != TokenType.TK_IDENT:
             print(f"the left side of assign is not a variable", file=sys.stderr)
-        self.visit(node.left)
-        self.visit(node.right)
+        node.left.accept(self)
+        node.right.accept(self)
 
     def visit_If_Node(self, node):
-        self.visit(node.condition)
+        node.condition.accept(self)
         if node.then_statement is not None:
-            self.visit(node.then_statement)
+            node.then_statement.accept(self)
         if node.else_statement is not None:
-            self.visit(node.else_statement)
+            node.else_statement.accept(self)
 
     def visit_While_Node(self, node):
-        self.visit(node.condition)
+        node.condition.accept(self)
         if node.statement is not None:
-            self.visit(node.statement)
+            node.statement.accept(self)
 
     def visit_Block_Node(self, node):
         block_name= self.current_scope.scope_name + f' block' + \
@@ -905,7 +965,7 @@ class SemanticAnalyzer(NodeVisitor):
         )
         self.current_scope = block_scope
         for eachnode in node.statement_nodes:
-            self.visit(eachnode)
+            eachnode.accept(self)
 
         self.current_scope = self.current_scope.enclosing_scope
         self.log(f'LEAVE scope: {block_name}')
@@ -958,9 +1018,9 @@ class SemanticAnalyzer(NodeVisitor):
 
         # Insert formal_parameters into the function scope
         for eachparam in node.formal_parameters:
-            self.visit(eachparam)
+            eachparam.accept(self)
 
-        self.visit(node.block_node) # visit function block
+        node.block_node.accept(self) # visit function block
 
         node.offset = Offset.sum
 
@@ -975,10 +1035,12 @@ class SemanticAnalyzer(NodeVisitor):
 
     def semantic_analyze(self, tree):
         # Traverse the AST to construct symbol table.
+        # for node in tree:
+        #     if node is not None:
+        #         self.visit(node)
         for node in tree:
             if node is not None:
-                self.visit(node)
-
+                node.accept(self)
 
 
 ##################################################################################################
@@ -994,21 +1056,21 @@ class Codegenerator(NodeVisitor):
       return int((n + align - 1) / align) * align
 
     def visit_UnaryOp_Node(self, node):
-        self.visit(node.right)
+        node.right.accept(self)
         if node.op.type == TokenType.TK_MINUS:
             print(f"    neg %rax")
         elif node.op.type == TokenType.TK_NOT:
             print(f"    not %rax")
 
     def visit_Return_Node(self, node):
-        self.visit(node.right)
+        node.right.accept(self)
         if node.token.type == TokenType.TK_RETURN:
             print(f"    jmp .{node.function_name}.return")
 
     def visit_BinaryOp_Node(self, node):
-        self.visit(node.right)
+        node.right.accept(self)
         print(f"    push %rax")
-        self.visit(node.left)
+        node.left.accept(self)
         print(f"    pop %rdi")
         if node.op.type == TokenType.TK_PLUS:
             print(f"    add %rdi, %rax")
@@ -1048,6 +1110,7 @@ class Codegenerator(NodeVisitor):
         elif node.op.type == TokenType.TK_OR:
             print(f"    or %rdi, %rax")
 
+
     def visit_Assign_Node(self, node):
         if node.left.token.type == TokenType.TK_IDENT:
             # var is left-value
@@ -1056,7 +1119,7 @@ class Codegenerator(NodeVisitor):
             # left-value
             print(f"    push %rax")
 
-            self.visit(node.right)
+            node.right.accept(self)
             print(f"    pop %rdi")
             print(f"    mov %rax, (%rdi)")
         else:
@@ -1072,31 +1135,31 @@ class Codegenerator(NodeVisitor):
 
     def visit_If_Node(self, node):
         Count.i += 1
-        self.visit(node.condition)
+        node.condition.accept(self)
         print(f"    cmp $0, %rax")
         print(f"    je  .L.else.{Count.i}")
         if node.then_statement is not None:
-            self.visit(node.then_statement)
+            node.then_statement.accept(self)
         print(f"    jmp .L.end.{Count.i}")
         print(f".L.else.{Count.i}:")
         if node.else_statement is not None:
-            self.visit(node.else_statement)
+            node.else_statement.accept(self)
         print(f".L.end.{Count.i}:")
 
     def visit_While_Node(self, node):
         Count.i += 1
         print(f".L.condition.{Count.i}:")
-        self.visit(node.condition)
+        node.condition.accept(self)
         print(f"    cmp $0, %rax")
         print(f"    je  .L.end.{Count.i}")
         if node.statement is not None:
-            self.visit(node.statement)
+            node.statement.accept(self)
         print(f"    jmp .L.condition.{Count.i}")
         print(f".L.end.{Count.i}:")
 
     def visit_Block_Node(self, node):
         for eachnode in node.statement_nodes:
-            self.visit(eachnode)
+            eachnode.accept(self)
         # self.log(f'LEAVE scope: {block_name}')
 
     def visit_Var_Node(self, node):
@@ -1116,7 +1179,7 @@ class Codegenerator(NodeVisitor):
     def visit_FunctionCall_Node(self, node):
         nparams = 0
         for eachnode in node.actual_parameter_nodes:
-            self.visit(eachnode)
+            eachnode.accept(self)
             print(f"    push %rax")
             nparams += 1
         for i in range(nparams, 0, -1):
@@ -1144,7 +1207,7 @@ class Codegenerator(NodeVisitor):
             i += 1
 
         # Visit function block
-        self.visit(node.block_node)
+        node.block_node.accept(self)
 
         print(f".{node.function_name}.return:")
         # Epilogue
@@ -1157,7 +1220,7 @@ class Codegenerator(NodeVisitor):
         # Traverse the AST to emit assembly.
         for node in tree:
             if node is not None:
-                self.visit(node)
+                node.accept(self)
 
 
 
