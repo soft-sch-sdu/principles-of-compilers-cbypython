@@ -81,5 +81,13 @@ assert 3 'int main() {if(1>2) then return 5; else ; return 3;}'
 assert 6 'int main() {myprint(); return 6; }'
 
 assert 3 'int main() {bool b; b= (1<2) || (1>2) ; if(b) then return 3;}'
+assert 3 'int main() {int a; a=3; return ^~a;}'
+assert 3 'int main() {int x; int y; x=3; return ^~x; }'
+assert 3 'int main() {int x; int y; x=3; y=~x; return ^y; }'
+assert 3 'int main() {int x; int y; int z; x=3; y=~x; z=~y; return ^^z; }'
+assert 7 'int main() {int x; int y; x=3; y=7; return ^(~x-8); }'
+assert 7 'int main() { int x; int y; x=3; y=~x; ^y=7; return x; }'
+assert 7 'int main() { int x; int y; x=3; y=5; ^(~x-8)=7; return y; }'
+assert 7 'int main() { int x; int y; x=3; y=5; ^(~y+8)=7; return x; }'
 
 echo OK

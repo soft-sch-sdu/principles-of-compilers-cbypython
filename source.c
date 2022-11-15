@@ -1,1 +1,1 @@
-int main() {bool b; b = true ; return 3;}
+int main() { int x; int y; x=3; y=5; ^(~x-8)=7; return y; }

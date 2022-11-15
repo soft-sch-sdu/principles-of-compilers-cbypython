@@ -491,7 +491,7 @@ class Parser:
     def primary(self):
         token = self.current_token
 
-        # "(" expression ")"
+        # "(" expr ")"
         if token.type == TokenType.TK_LPAREN:
             self.eat(TokenType.TK_LPAREN)
             node = self.expression()
@@ -926,7 +926,7 @@ class SemanticAnalyzer(NodeVisitor):
             print(msg)
 
     def visit_UnaryOp_Node(self, node):
-        pass
+        node.right.accept(self)
 
     def visit_Return_Node(self, node):
         node.right.accept(self)
@@ -937,8 +937,8 @@ class SemanticAnalyzer(NodeVisitor):
 
     def visit_Assign_Node(self, node):
         # make sure the left side of assign is a varible
-        if node.left.token.type != TokenType.TK_IDENT:
-            print(f"the left side of assign is not a variable", file=sys.stderr)
+        # if node.left.token.type != TokenType.TK_IDENT:
+        #     print(f"the left side of assign is not a variable", file=sys.stderr)
         node.left.accept(self)
         node.right.accept(self)
 
@@ -1056,20 +1056,20 @@ class Codegenerator(NodeVisitor):
     def align_to(self, n, align):
       return int((n + align - 1) / align) * align
 
-    # Compute the absolute address of a given node.
-    # It's an error if a given node does not reside in memory.
-    def generate_address(self, node):
-        if node.token.type == TokenType.TK_IDENT:
-            var_offset = node.symbol.offset
-            print(f"    lea {var_offset}(%rbp), %rax")
-
-
     def visit_UnaryOp_Node(self, node):
-        node.right.accept(self)
         if node.op.type == TokenType.TK_MINUS:
+            node.right.accept(self)
             print(f"    neg %rax")
         elif node.op.type == TokenType.TK_NOT:
+            node.right.accept(self)
             print(f"    not %rax")
+        if node.op.type == TokenType.TK_ADDR:
+            var_offset = node.right.symbol.offset
+            print(f"    lea {var_offset}(%rbp), %rax")
+         #   print(f"    push %rax")
+        elif node.op.type == TokenType.TK_DEREF:
+            node.right.accept(self)
+            print(f"    mov (%rax), %rax")
 
     def visit_Return_Node(self, node):
         node.right.accept(self)
@@ -1119,14 +1119,38 @@ class Codegenerator(NodeVisitor):
         elif node.op.type == TokenType.TK_OR:
             print(f"    or %rdi, %rax")
 
+    # Compute the absolute address of a given node.
+    # It's an error if a given node does not reside in memory.
+    # def generate_address(self, node):
+    #     if node.token.type == TokenType.TK_IDENT:
+    #         var_offset = node.symbol.offset
+    #         print(f"    lea {var_offset}(%rbp), %rax")
+    #     elif node.type == TokenType.TK_DEREF:
 
     def visit_Assign_Node(self, node):
+        # # generate memory address for left-hand side
+        # self.generate_address(node.left)
         if node.left.token.type == TokenType.TK_IDENT:
             # var is left-value
             var_offset = node.left.symbol.offset
             print(f"    lea {var_offset}(%rbp), %rax")
             # left-value
             print(f"    push %rax")
+
+            node.right.accept(self)
+            print(f"    pop %rdi")
+            print(f"    mov %rax, (%rdi)")
+        elif node.left.token.type == TokenType.TK_DEREF:
+            address = node.left.right
+            if address.token.type == TokenType.TK_IDENT:
+                var_offset = address.symbol.offset
+                print(f"    lea {var_offset}(%rbp), %rax")
+                print(f"    mov (%rax), %rax")
+                # left-value
+                print(f"    push %rax")
+            elif address.token.type != TokenType.TK_IDENT:
+                address.accept(self)
+                print(f"    push %rax")
 
             node.right.accept(self)
             print(f"    pop %rdi")
