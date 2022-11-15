@@ -77,6 +77,8 @@ class TokenType(Enum):
     TK_SEMICOLON     = ';'
     TK_ASSIGN        = '='
     TK_NOT            = '!'
+    TK_ADDR           = '~'
+    TK_DEREF          = '^'
     # double-character token types
     TK_AND         = '&&'
     TK_OR            = '||'
@@ -484,12 +486,12 @@ class Parser:
                 token=self.current_token,
             )
 
-    # primary = "(" expr ")" | identifier args? | num
-    # args = "(" (assign ("," assign)*)? ")"
+    # primary := "(" expression ")" | identifier args? | num
+    # args := "(" (expression ("," expression)*)? ")"
     def primary(self):
         token = self.current_token
 
-        # "(" expr ")"
+        # "(" expression ")"
         if token.type == TokenType.TK_LPAREN:
             self.eat(TokenType.TK_LPAREN)
             node = self.expression()
@@ -505,12 +507,12 @@ class Parser:
                 self.eat(TokenType.TK_LPAREN)
                 actual_parameter_nodes = []
                 if self.current_token.type != TokenType.TK_RPAREN:
-                    node = self.assign()
+                    node = self.expression()
                     actual_parameter_nodes.append(node)
 
                 while self.current_token.type == TokenType.TK_COMMA:
                     self.eat(TokenType.TK_COMMA)
-                    node = self.assign()
+                    node = self.expression()
                     actual_parameter_nodes.append(node)
                 self.eat(TokenType.TK_RPAREN)
                 node = FunctionCall_Node(
@@ -532,7 +534,7 @@ class Parser:
             self.eat(TokenType.TK_BOOL_CONST_FALSE)
             return Num_Node(token)
 
-    # unary = ("+" | "-" | "!") unary
+    # unary := ("+" | "-" | "!" | "~" | "^") unary
     #        | primary
     def unary(self):
         token = self.current_token
@@ -545,10 +547,16 @@ class Parser:
         elif token.type == TokenType.TK_NOT:
             self.eat(TokenType.TK_NOT)
             return UnaryOp_Node(op=token, right=self.unary())
+        elif token.type == TokenType.TK_ADDR:
+            self.eat(TokenType.TK_ADDR)
+            return UnaryOp_Node(op=token, right=self.unary())
+        elif token.type == TokenType.TK_DEREF:
+            self.eat(TokenType.TK_DEREF)
+            return UnaryOp_Node(op=token, right=self.unary())
         else:
             return self.primary()
 
-    # mul_div = unary ("*" unary | "/" unary)*
+    # mul_div := unary ("*" unary | "/" unary)*
     def mul_div(self):
         node = self.unary()
         while True:
@@ -563,7 +571,7 @@ class Parser:
                 continue
             return node
 
-    # add-sub = mul_div ("+" mul_div | "-" mul_div)*
+    # add-sub := mul_div ("+" mul_div | "-" mul_div)*
     def add_sub(self):
         node = self.mul_div()
         while True:
@@ -578,7 +586,7 @@ class Parser:
                 continue
             return node
 
-    # relational = add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
+    # relational := add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
     def relational(self):
         node = self.add_sub()
         while True:
@@ -601,7 +609,7 @@ class Parser:
                 continue
             return node
 
-    # equality = relational ("==" relational | "! =" relational)*
+    # equality := relational ("==" relational | "! =" relational)*
     def equality(self):
         node = self.relational()
         while True:
@@ -616,7 +624,7 @@ class Parser:
                 continue
             return node
 
-    # logic = equality ("&&" equality | "||" equality)*
+    # logic := equality ("&&" equality | "||" equality)*
     def logic(self):
         node = self.equality()
         while True:
@@ -631,22 +639,16 @@ class Parser:
                 continue
             return node
 
-    # assign = logic ("=" assign)?
-    def assign(self):
-        # node = self.equality()
+    # expression := logic ("=" expression)?
+    def expression(self):
         node = self.logic()
         token = self.current_token
         if token.type == TokenType.TK_ASSIGN:
             self.eat(TokenType.TK_ASSIGN)
-            node = Assign_Node(left=node, op=token, right=self.assign())
-        return node
+            node = Assign_Node(left=node, op=token, right=self.expression())
+        return node  # logic node or assign node
 
-    # expression = assign
-    def expression(self):
-        node = self.assign()
-        return node
-
-    # expression-statement = expression? ";"
+    # expression-statement := expression? ";"
     def expression_statement(self):
         token = self.current_token
         node = None
@@ -660,7 +662,7 @@ class Parser:
                 Error.show_error_at(token.lineno, token.column - token.width + 1, "expect \";\"")
         return node
 
-    # statement = expression-statement
+    # statement := expression-statement
     #             | "return" expression-statement
     #             | block
     #             | "if" "(" expression ")" statement ("else" statement)?
@@ -707,7 +709,7 @@ class Parser:
             # expression-statement
             return self.expression_statement()
 
-    # type_specification = int | bool  //TODO: REAL
+    # type_specification := int | bool  //TODO: REAL
     def type_specification(self):
         token = self.current_token
         if self.current_token.type == TokenType.TK_INT:
@@ -719,7 +721,7 @@ class Parser:
         node = Type_Node(token)
         return node
 
-    # variable_declaration = type_specification (indentifier ("=" expr)? ("," indentifier ("=" expr)?)*)? ";"
+    # variable_declaration := type_specification (indentifier ("=" expr)? ("," indentifier ("=" expr)?)*)? ";"
     def variable_declaration(self):
         type_node = self.type_specification()
         variable_nodes = []
@@ -735,7 +737,7 @@ class Parser:
         self.eat(TokenType.TK_SEMICOLON)
         return variable_nodes
 
-    # compound_statement = (variable_declaration | statement)*
+    # compound_statement := (variable_declaration | statement)*
     def compound_statement(self):
         statement_nodes = []
         while self.current_token.type != TokenType.TK_RBRACE and \
@@ -751,7 +753,7 @@ class Parser:
                     statement_nodes.append(node)
         return statement_nodes
 
-    # block = "{" compound_statement "}"
+    # block := "{" compound_statement "}"
     def block(self):
         if self.current_token.type == TokenType.TK_LBRACE:
             ltok = self.current_token  # "{"
@@ -761,14 +763,14 @@ class Parser:
             self.eat(TokenType.TK_RBRACE)
             return Block_Node(ltok, rtok, statement_nodes)
 
-    # formal_parameter = type_specification identifier
+    # formal_parameter := type_specification identifier
     def formal_parameter(self):
         type_node = self.type_specification()
         parameter_node = Var_Node(self.current_token)
         self.eat(TokenType.TK_IDENT)
         return FormalParam_Node(type_node, parameter_node)
 
-    # formal_parameters = formal_parameter (, formal_parameter)*
+    # formal_parameters := formal_parameter (, formal_parameter)*
     def formal_parameters(self):
         formal_params = []
         formal_params.append(self.formal_parameter())
@@ -781,7 +783,7 @@ class Parser:
                 exit(1)
         return formal_params
 
-    # function_definition= type_specification identifier "(" formal_parameters? ")" block
+    # function_definition := type_specification identifier "(" formal_parameters? ")" block
     def function_definition(self):
         type_node = self.type_specification()
         function_name = self.current_token.value
@@ -803,33 +805,32 @@ class Parser:
 
         return FunctionDef_Node(type_node, function_name, formal_params, block_node)
 
-    # program = function_definition*
+    # program := function_definition*
     def parse(self):
         """
-        program = function_definition*
-        function_definition = type_specification identifier "(" formal_parameters? ")" block
-        formal_parameters = formal_parameter ("," formal_parameter)*
-        formal_parameter = type_specification identifier
-        type_specification = "int" | "bool"
-        block = "{" compound_statement "}"
-        compound_statement = (variable_declaration | statement)*
-        statement = expression-statement
+        program := function_definition*
+        function_definition := type_specification identifier "(" formal_parameters? ")" block
+        formal_parameters := formal_parameter ("," formal_parameter)*
+        formal_parameter := type_specification identifier
+        type_specification := "int" | "bool"
+        block := "{" compound_statement "}"
+        compound_statement := (variable_declaration | statement)*
+        statement := expression-statement
                     | "return" expression-statement
                     | block
                     | "if" "(" expression ")" statement ("else" statement)?
                     | "while" "(" expression ")" statement
-        variable_declaration = type_specification (identifier ("=" expr)? ("," identifier ("=" expr)?)*)? ";"
-        expression-statement = expression? ";"
-        expression = assign
-        assign = logic ("=" assign)?
-        logic = equality ("&&" equality | "||" equality)*
-        equality = relational ("==" relational | "! =" relational)*
-        relational = add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
-        add_sub = mul_div ("+" mul_div | "-" mul_div)*
-        mul_div = unary ("*" unary | "/" unary)*
-        unary = ("+" | "-") primary | primary
-        primary = "(" expr ")" | identifier args?| num
-        args = "(" (assign ("," assign)*)? ")"
+        variable_declaration := type_specification (identifier ("=" expr)? ("," identifier ("=" expr)?)*)? ";"
+        expression-statement := expression? ";"
+        expression := logic ("=" expression)?
+        logic := equality ("&&" equality | "||" equality)*
+        equality := relational ("==" relational | "! =" relational)*
+        relational := add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
+        add_sub := mul_div ("+" mul_div | "-" mul_div)*
+        mul_div := unary ("*" unary | "/" unary)*
+        unary := ("+" | "-") primary | primary
+        primary := "(" expression ")" | identifier args?| num
+        args := "(" (expression ("," expression)*)? ")"
         """
 
         function_definition_nodes = []
@@ -1054,6 +1055,14 @@ class Codegenerator(NodeVisitor):
     # align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
     def align_to(self, n, align):
       return int((n + align - 1) / align) * align
+
+    # Compute the absolute address of a given node.
+    # It's an error if a given node does not reside in memory.
+    def generate_address(self, node):
+        if node.token.type == TokenType.TK_IDENT:
+            var_offset = node.symbol.offset
+            print(f"    lea {var_offset}(%rbp), %rax")
+
 
     def visit_UnaryOp_Node(self, node):
         node.right.accept(self)
