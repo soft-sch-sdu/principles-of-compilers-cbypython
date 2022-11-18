@@ -88,6 +88,13 @@ assert 3 'int main() {int x; int y; int z; x=3; y=~x; z=~y; return ^^z; }'
 assert 7 'int main() {int x; int y; x=3; y=7; return ^(~x-8); }'
 assert 7 'int main() { int x; int y; x=3; y=~x; ^y=7; return x; }'
 assert 7 'int main() { int x; int y; x=3; y=5; ^(~x-8)=7; return y; }'
-assert 7 'int main() { int x; int y; x=3; y=5; ^(~y+8)=7; return x; }'
+assert 7 'int main() { int x; int y; x=3; y=5; ^(8+~y)=7; return x; }'
+assert 7 'int main() { int x[1]={7}; return x[1];}'
+assert 9 'int main() { int x[2]={7,9}; return x[2]; }'
+assert 9 'int main() { int x[3]={7,9,11}; int temp; temp = x[2]; return temp;}'
+assert 13 'int main() { int x[3]={7,9,11}; x[2] = 13; return x[2];}'
+assert 11 'int main() { int x[3]={7,9,11}; int temp; temp=x[1]; x[1]=x[3]; x[3]=temp; return x[1]; }'
+assert 11 'int main() { int x[3]={7,9,11}; int temp; temp=x[1]; x[1]=x[3]; x[3]=temp;
+                         if(x[1]>x[2]) then return x[1]; else return x[2]; }'
 
 echo OK

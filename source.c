@@ -1,1 +1,1 @@
-int main() { int x; int y; x=3; y=5; ^(~x-8)=7; return y; }
+int main() { int x[3]={7,9,11}; x[3] = 13; return x[3];}

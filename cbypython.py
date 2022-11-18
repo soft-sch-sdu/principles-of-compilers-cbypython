@@ -80,7 +80,7 @@ class TokenType(Enum):
     TK_ADDR           = '~'
     TK_DEREF          = '^'
     # double-character token types
-    TK_AND         = '&&'
+    TK_AND           = '&&'
     TK_OR            = '||'
     TK_EQ            = '=='
     TK_NE            = '!='
@@ -349,39 +349,47 @@ class Num_Node(AST_Node):
 
 class Var_Node(AST_Node):
     """The Var node is constructed out of ID token."""
-    def __init__(self, token):
+    def __init__(self, token, array = None):
         self.token = token
-        self.value = token.value
+        self.name = token.value
+        self.array = array
         self.symbol = None
     def accept(self, visitor):
         visitor.visit_Var_Node(self)
 
+class Var_array_item_Node(AST_Node):
+    def __init__(self, token, index):
+        self.token = token
+        self.index = index
+        self.array = 'Yes'
+    def accept(self, visitor):
+        visitor.visit_Var_array_item_Node(self)
 
-class Type_Node(AST_Node):
+class BasicType_Node(AST_Node):
     def __init__(self, token):
         self.token = token
         self.value = token.value
     def accept(self, visitor):
-        visitor.visit_Type_Node(self)
+        visitor.visit_BasicType_Node(self)
 
 class VarDecl_Node(AST_Node):
-    def __init__(self, type_node, var_node):
-        self.type_node = type_node
+    def __init__(self, basictype_node, var_node):
+        self.basictype_node = basictype_node
         self.var_node = var_node
     def accept(self, visitor):
         visitor.visit_VarDecl_Node(self)
 
 class FormalParam_Node(AST_Node):
-    def __init__(self, type_node, parameter_node):
-        self.type_node = type_node
+    def __init__(self, basictype_node, parameter_node):
+        self.basictype_node = basictype_node
         self.parameter_node = parameter_node
         self.parameter_symbol = None
     def accept(self, visitor):
         visitor.visit_FormalParam_Node(self)
 
 class FunctionDef_Node(AST_Node):
-    def __init__(self, type_node, function_name, formal_parameters, block_node):
-        self.type_node = type_node
+    def __init__(self, basictype_node, function_name, formal_parameters, block_node):
+        self.basictype_node = basictype_node
         self.function_name = function_name
         self.formal_parameters = formal_parameters
         self.block_node = block_node
@@ -486,7 +494,7 @@ class Parser:
                 token=self.current_token,
             )
 
-    # primary := "(" expression ")" | identifier args? | num
+    # primary := "(" expression ")" | identifier args? | num |identifier "[" expression "]"
     # args := "(" (expression ("," expression)*)? ")"
     def primary(self):
         token = self.current_token
@@ -500,6 +508,7 @@ class Parser:
 
         # identifier
         if token.type == TokenType.TK_IDENT:
+            token = self.current_token
             self.eat(TokenType.TK_IDENT)
             # Function call
             if self.current_token.type == TokenType.TK_LPAREN:
@@ -520,6 +529,14 @@ class Parser:
                         actual_parameter_nodes = actual_parameter_nodes,
                         token = token)
                 return node
+            # array_item
+            if self.current_token.type == TokenType.TK_LBRACK:
+                array_name_token = token
+                self.eat(TokenType.TK_LBRACK)
+                index = self.expression()
+                if self.current_token.type == TokenType.TK_RBRACK:
+                    self.eat(TokenType.TK_RBRACK)
+                return Var_array_item_Node(array_name_token, index)
             # Variable
             return Var_Node(token)
 
@@ -718,22 +735,61 @@ class Parser:
             self.eat(TokenType.TK_BOOL)
         # elif self.current_token.type == TokenType.REAL:
         #     self.eat(TokenType.REAL)
-        node = Type_Node(token)
+        node = BasicType_Node(token)
         return node
 
-    # variable_declaration := type_specification (indentifier ("=" expr)? ("," indentifier ("=" expr)?)*)? ";"
+    # variable_declaration := type_specification identifier ("," indentifier)* ";"
+    #                       | type_specification identifier "[" num "]" ("=" "{" (num)? ("," num)* "}")? ";"
     def variable_declaration(self):
-        type_node = self.type_specification()
+        basictype_node = self.type_specification()
         variable_nodes = []
         while self.current_token.type != TokenType.TK_SEMICOLON:
             if self.current_token.type == TokenType.TK_IDENT:
-                var_node = Var_Node(self.current_token)
-                node = VarDecl_Node(type_node, var_node)
+                token = self.current_token
                 self.eat(TokenType.TK_IDENT)
-                variable_nodes.append(node)
-                if self.current_token.type == TokenType.TK_COMMA:
-                    self.eat(TokenType.TK_COMMA)
-
+                if self.current_token.type == TokenType.TK_LBRACK:
+                    array_items = []
+                    self.eat(TokenType.TK_LBRACK)
+                    if self.current_token.type == TokenType.TK_INTEGER_CONST:
+                        array_size = self.current_token.value
+                        self.eat(TokenType.TK_INTEGER_CONST)
+                        if self.current_token.type == TokenType.TK_RBRACK:
+                            self.eat(TokenType.TK_RBRACK)
+                    if self.current_token.type == TokenType.TK_ASSIGN:
+                        self.eat(TokenType.TK_ASSIGN)
+                        if self.current_token.type == TokenType.TK_LBRACE:
+                            self.eat(TokenType.TK_LBRACE)
+                            while self.current_token.type != TokenType.TK_RBRACE:
+                                if self.current_token.type == TokenType.TK_INTEGER_CONST:
+                                    array_items.append(self.current_token.value)
+                                    self.eat(TokenType.TK_INTEGER_CONST)
+                                if self.current_token.type == TokenType.TK_COMMA:
+                                    self.eat(TokenType.TK_COMMA)
+                                    if self.current_token.type == TokenType.TK_INTEGER_CONST:
+                                        array_items.append(self.current_token.value)
+                                        self.eat(TokenType.TK_INTEGER_CONST)
+                                    else:
+                                        print(f"array item error")
+                                        exit(1)
+                            self.eat(TokenType.TK_RBRACE)
+                            value = {'size': array_size, 'items': array_items}
+                            var_node = Var_Node(token, value)
+                            node = VarDecl_Node(basictype_node, var_node)
+                            variable_nodes.append(node)
+                else:
+                    var_node = Var_Node(token)
+                    node = VarDecl_Node(basictype_node, var_node)
+                    variable_nodes.append(node)
+                    if self.current_token.type == TokenType.TK_COMMA:
+                        self.eat(TokenType.TK_COMMA)
+                    while self.current_token.type != TokenType.TK_SEMICOLON:
+                        if self.current_token.type == TokenType.TK_IDENT:
+                            var_node = Var_Node(self.current_token)
+                            node = VarDecl_Node(basictype_node, var_node)
+                            self.eat(TokenType.TK_IDENT)
+                            variable_nodes.append(node)
+                            if self.current_token.type == TokenType.TK_COMMA:
+                                self.eat(TokenType.TK_COMMA)
         self.eat(TokenType.TK_SEMICOLON)
         return variable_nodes
 
@@ -765,10 +821,10 @@ class Parser:
 
     # formal_parameter := type_specification identifier
     def formal_parameter(self):
-        type_node = self.type_specification()
+        basictype_node = self.type_specification()
         parameter_node = Var_Node(self.current_token)
         self.eat(TokenType.TK_IDENT)
-        return FormalParam_Node(type_node, parameter_node)
+        return FormalParam_Node(basictype_node, parameter_node)
 
     # formal_parameters := formal_parameter (, formal_parameter)*
     def formal_parameters(self):
@@ -785,7 +841,7 @@ class Parser:
 
     # function_definition := type_specification identifier "(" formal_parameters? ")" block
     def function_definition(self):
-        type_node = self.type_specification()
+        basictype_node = self.type_specification()
         function_name = self.current_token.value
         self.eat(TokenType.TK_IDENT)
 
@@ -803,7 +859,7 @@ class Parser:
             Error.show_error_at(token.lineno, self.current_token.column - self.current_token.width,
                                 f"expect \"{TokenType.TK_LBRACE.value}\"")
 
-        return FunctionDef_Node(type_node, function_name, formal_params, block_node)
+        return FunctionDef_Node(basictype_node, function_name, formal_params, block_node)
 
     # program := function_definition*
     def parse(self):
@@ -820,7 +876,8 @@ class Parser:
                     | block
                     | "if" "(" expression ")" statement ("else" statement)?
                     | "while" "(" expression ")" statement
-        variable_declaration := type_specification (identifier ("=" expr)? ("," identifier ("=" expr)?)*)? ";"
+        variable_declaration := type_specification identifier ("," identifier)* ";"
+                              | type_specification identifier "[" num "]" ("=" "{" (num)? ("," num)* "}")?
         expression-statement := expression? ";"
         expression := logic ("=" expression)?
         logic := equality ("&&" equality | "||" equality)*
@@ -828,7 +885,7 @@ class Parser:
         relational := add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
         add_sub := mul_div ("+" mul_div | "-" mul_div)*
         mul_div := unary ("*" unary | "/" unary)*
-        unary := ("+" | "-") primary | primary
+        unary := unary := ("+" | "-" | "!" | "~" | "^") unary | primary
         primary := "(" expression ")" | identifier args?| num
         args := "(" (expression ("," expression)*)? ")"
         """
@@ -974,8 +1031,17 @@ class SemanticAnalyzer(NodeVisitor):
     def visit_Num_Node(self, node):
         pass
 
+    def visit_Var_array_item_Node(self, node):
+        array_name = node.token.value
+        array_symbol = self.current_scope.lookup(array_name)
+        if array_symbol is None:
+            print(f"semantic error, array variable not declared", file=sys.stderr)
+            sys.exit(1)
+        else:
+            node.symbol = array_symbol
+
     def visit_Var_Node(self, node):
-        var_name = node.value
+        var_name = node.name
         var_symbol = self.current_scope.lookup(var_name)
         if var_symbol is None:
             print(f"semantic error, var not declared", file=sys.stderr)
@@ -984,17 +1050,24 @@ class SemanticAnalyzer(NodeVisitor):
             node.symbol = var_symbol
 
     def visit_VarDecl_Node(self, node):
-        var_name = node.var_node.value
-        var_type = node.type_node.value
-        Offset.sum += 8
-        var_offset = -Offset.sum
-        var_symbol = Var_Symbol(var_name, var_type, var_offset)
-        self.current_scope.insert(var_symbol)
+        var_name = node.var_node.name
+        var_basictype = node.basictype_node.value
+        if node.var_node.array != None:  #array
+            Offset.sum += 8 * node.var_node.array['size']
+            var_offset = -Offset.sum
+            var_symbol = Var_Symbol(var_name, var_basictype, var_offset)
+            node.var_node.symbol = var_symbol
+            self.current_scope.insert(var_symbol)
+        else:  # variable (not array)
+            Offset.sum += 8
+            var_offset = -Offset.sum
+            var_symbol = Var_Symbol(var_name, var_basictype, var_offset)
+            self.current_scope.insert(var_symbol)
 
 
     def visit_FormalParam_Node(self, node):
-        parameter_name = node.parameter_node.value
-        parameter_type = node.type_node.value
+        parameter_name = node.parameter_node.name
+        parameter_type = node.basictype_node.value
         Offset.sum += 8
         parameter_offset = -Offset.sum
         parameter_symbol = Parameter_Symbol(parameter_name, parameter_type, parameter_offset)
@@ -1119,13 +1192,17 @@ class Codegenerator(NodeVisitor):
         elif node.op.type == TokenType.TK_OR:
             print(f"    or %rdi, %rax")
 
-    # Compute the absolute address of a given node.
-    # It's an error if a given node does not reside in memory.
-    # def generate_address(self, node):
-    #     if node.token.type == TokenType.TK_IDENT:
-    #         var_offset = node.symbol.offset
-    #         print(f"    lea {var_offset}(%rbp), %rax")
-    #     elif node.type == TokenType.TK_DEREF:
+    # Compute the absolute address of a given array item.
+    # Put it in register %rax
+    # It's an error if a given array item does not reside in memory.
+    def generate_array_item_address(self, node):
+        array_offset = node.symbol.offset
+        array_item_offset = (node.index.value - 1) * 8
+        print(f"    mov ${array_item_offset}, %rax")
+        print(f"    push %rax")
+        print(f"    lea {array_offset}(%rbp), %rax")
+        print(f"    pop %rdi")
+        print(f"    add %rdi, %rax")
 
     def visit_Assign_Node(self, node):
         # # generate memory address for left-hand side
@@ -1136,6 +1213,12 @@ class Codegenerator(NodeVisitor):
             print(f"    lea {var_offset}(%rbp), %rax")
             # left-value
             print(f"    push %rax")
+            if node.left.array != None:
+                # array_item is left-value
+                # generate its address in memory (the result is in %rax)
+                self.generate_array_item_address(node.left)
+                # put the address on top of stack
+                print(f"    push %rax")
 
             node.right.accept(self)
             print(f"    pop %rdi")
@@ -1195,6 +1278,15 @@ class Codegenerator(NodeVisitor):
             eachnode.accept(self)
         # self.log(f'LEAVE scope: {block_name}')
 
+
+    def visit_Var_array_item_Node(self, node):
+        # array_item is right-value
+        # generate its address in memory (the result is in %rax)
+        self.generate_array_item_address(node)
+        # put the value in memory (location is (%rax)) into %rax
+        print(f"    mov (%rax), %rax")
+
+
     def visit_Var_Node(self, node):
         # var is right-value
         var_offset = node.symbol.offset
@@ -1202,9 +1294,22 @@ class Codegenerator(NodeVisitor):
         # right-value
         print(f"    mov (%rax), %rax")
 
-
     def visit_VarDecl_Node(self, node):
-        pass
+        if node.var_node.array != None:
+            array_offset = node.var_node.symbol.offset
+            array_size = node.var_node.array['size']
+            i = 0
+            while i < array_size:
+                array_item_offset = i * 8
+                print(f"    mov ${array_item_offset}, %rax")
+                print(f"    push %rax")
+                print(f"    lea {array_offset}(%rbp), %rax")
+                print(f"    pop %rdi")
+                print(f"    add %rdi, %rax")
+                item_value = node.var_node.array['items'][i]
+                print(f"    mov ${item_value}, %rdi")
+                print(f"    mov %rdi, (%rax)")
+                i += 1
 
     def visit_FormalParam_Node(self, node):
         pass
