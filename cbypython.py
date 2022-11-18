@@ -77,8 +77,7 @@ class TokenType(Enum):
     TK_SEMICOLON     = ';'
     TK_ASSIGN        = '='
     TK_NOT            = '!'
-    TK_ADDR           = '~'
-    TK_DEREF          = '^'
+
     # double-character token types
     TK_AND           = '&&'
     TK_OR            = '||'
@@ -494,7 +493,7 @@ class Parser:
                 token=self.current_token,
             )
 
-    # primary := "(" expression ")" | identifier args? | num |identifier "[" expression "]"
+    # primary := "(" expression ")" | identifier args? | num | identifier "[" expression "]"
     # args := "(" (expression ("," expression)*)? ")"
     def primary(self):
         token = self.current_token
@@ -551,7 +550,7 @@ class Parser:
             self.eat(TokenType.TK_BOOL_CONST_FALSE)
             return Num_Node(token)
 
-    # unary := ("+" | "-" | "!" | "~" | "^") unary
+    # unary := ("+" | "-" | "!") unary
     #        | primary
     def unary(self):
         token = self.current_token
@@ -563,12 +562,6 @@ class Parser:
             return UnaryOp_Node(op=token, right=self.unary())
         elif token.type == TokenType.TK_NOT:
             self.eat(TokenType.TK_NOT)
-            return UnaryOp_Node(op=token, right=self.unary())
-        elif token.type == TokenType.TK_ADDR:
-            self.eat(TokenType.TK_ADDR)
-            return UnaryOp_Node(op=token, right=self.unary())
-        elif token.type == TokenType.TK_DEREF:
-            self.eat(TokenType.TK_DEREF)
             return UnaryOp_Node(op=token, right=self.unary())
         else:
             return self.primary()
@@ -885,8 +878,8 @@ class Parser:
         relational := add_sub ("<" add_sub | "<=" add_sub | ">" add_sub | ">=" add_sub)*
         add_sub := mul_div ("+" mul_div | "-" mul_div)*
         mul_div := unary ("*" unary | "/" unary)*
-        unary := unary := ("+" | "-" | "!" | "~" | "^") unary | primary
-        primary := "(" expression ")" | identifier args?| num
+        unary := unary := ("+" | "-" | "!") unary | primary
+        primary := "(" expression ")" | identifier args?| num identifier "[" expression "]"
         args := "(" (expression ("," expression)*)? ")"
         """
 
@@ -1136,13 +1129,6 @@ class Codegenerator(NodeVisitor):
         elif node.op.type == TokenType.TK_NOT:
             node.right.accept(self)
             print(f"    not %rax")
-        if node.op.type == TokenType.TK_ADDR:
-            var_offset = node.right.symbol.offset
-            print(f"    lea {var_offset}(%rbp), %rax")
-         #   print(f"    push %rax")
-        elif node.op.type == TokenType.TK_DEREF:
-            node.right.accept(self)
-            print(f"    mov (%rax), %rax")
 
     def visit_Return_Node(self, node):
         node.right.accept(self)
@@ -1218,21 +1204,6 @@ class Codegenerator(NodeVisitor):
                 # generate its address in memory (the result is in %rax)
                 self.generate_array_item_address(node.left)
                 # put the address on top of stack
-                print(f"    push %rax")
-
-            node.right.accept(self)
-            print(f"    pop %rdi")
-            print(f"    mov %rax, (%rdi)")
-        elif node.left.token.type == TokenType.TK_DEREF:
-            address = node.left.right
-            if address.token.type == TokenType.TK_IDENT:
-                var_offset = address.symbol.offset
-                print(f"    lea {var_offset}(%rbp), %rax")
-                print(f"    mov (%rax), %rax")
-                # left-value
-                print(f"    push %rax")
-            elif address.token.type != TokenType.TK_IDENT:
-                address.accept(self)
                 print(f"    push %rax")
 
             node.right.accept(self)
