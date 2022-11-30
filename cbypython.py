@@ -4,7 +4,6 @@ import sys
 from enum import Enum
 from abc import ABCMeta, abstractmethod
 
-
 _SHOULD_LOG_SCOPE = False  # see '--scope' command line option
 parameter_registers=['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
 
@@ -89,6 +88,7 @@ class TokenType(Enum):
     TK_INT           = 'int'
     TK_BOOL          = 'bool'
     TK_RETURN        = 'return'
+    TK_PRINT         = 'print'
     TK_IF            = 'if'
     TK_THEN          = 'then'
     TK_ELSE          = 'else'
@@ -408,6 +408,7 @@ class NodeVisitor(metaclass=ABCMeta):
     @abstractmethod
     def visit_UnaryOp_Node(self, node):
         pass
+
     @abstractmethod
     def visit_Return_Node(self, node):
         pass
@@ -879,7 +880,7 @@ class Parser:
         add_sub := mul_div ("+" mul_div | "-" mul_div)*
         mul_div := unary ("*" unary | "/" unary)*
         unary := unary := ("+" | "-" | "!") unary | primary
-        primary := "(" expression ")" | identifier args?| num identifier "[" expression "]"
+        primary := "(" expression ")" | identifier args?| num | identifier "[" expression "]"
         args := "(" (expression ("," expression)*)? ")"
         """
 
@@ -1032,6 +1033,7 @@ class SemanticAnalyzer(NodeVisitor):
             sys.exit(1)
         else:
             node.symbol = array_symbol
+            node.index.accept(self)
 
     def visit_Var_Node(self, node):
         var_name = node.name
@@ -1183,12 +1185,22 @@ class Codegenerator(NodeVisitor):
     # It's an error if a given array item does not reside in memory.
     def generate_array_item_address(self, node):
         array_offset = node.symbol.offset
-        array_item_offset = (node.index.value - 1) * 8
-        print(f"    mov ${array_item_offset}, %rax")
-        print(f"    push %rax")
-        print(f"    lea {array_offset}(%rbp), %rax")
-        print(f"    pop %rdi")
-        print(f"    add %rdi, %rax")
+        if node.index.token.type == TokenType.TK_INTEGER_CONST:
+            array_item_offset = (node.index.value - 1) * 8
+            print(f"    mov ${array_item_offset}, %rax")
+            print(f"    push %rax")
+            print(f"    lea {array_offset}(%rbp), %rax")
+            print(f"    pop %rdi")
+            print(f"    add %rdi, %rax")
+        else:
+            node.index.accept(self)
+            print(f"    sub $1, %rax")
+            print(f"    imul $8, %rax")
+            # print(f"    mov ${array_item_offset}, %rax")
+            print(f"    push %rax")
+            print(f"    lea {array_offset}(%rbp), %rax")
+            print(f"    pop %rdi")
+            print(f"    add %rdi, %rax")
 
     def visit_Assign_Node(self, node):
         # # generate memory address for left-hand side
@@ -1222,27 +1234,29 @@ class Codegenerator(NodeVisitor):
 
     def visit_If_Node(self, node):
         Count.i += 1
+        localLabel = Count.i
         node.condition.accept(self)
         print(f"    cmp $0, %rax")
-        print(f"    je  .L.else.{Count.i}")
+        print(f"    je  .L.else.{localLabel}")
         if node.then_statement is not None:
             node.then_statement.accept(self)
-        print(f"    jmp .L.end.{Count.i}")
-        print(f".L.else.{Count.i}:")
+        print(f"    jmp .L.endd.{localLabel}")
+        print(f".L.else.{localLabel}:")
         if node.else_statement is not None:
             node.else_statement.accept(self)
-        print(f".L.end.{Count.i}:")
+        print(f".L.endd.{localLabel}:")
 
     def visit_While_Node(self, node):
         Count.i += 1
-        print(f".L.condition.{Count.i}:")
+        localLabel = Count.i
+        print(f".L.condition.{localLabel}:")
         node.condition.accept(self)
         print(f"    cmp $0, %rax")
-        print(f"    je  .L.end.{Count.i}")
+        print(f"    je  .L.end.{localLabel}")
         if node.statement is not None:
             node.statement.accept(self)
-        print(f"    jmp .L.condition.{Count.i}")
-        print(f".L.end.{Count.i}:")
+        print(f"    jmp .L.condition.{localLabel}")
+        print(f".L.end.{localLabel}:")
 
     def visit_Block_Node(self, node):
         for eachnode in node.statement_nodes:
@@ -1298,10 +1312,10 @@ class Codegenerator(NodeVisitor):
         print(f"    call {node.function_name}")
 
     def visit_FunctionDef_Node(self, node):
-        # leon: initialize the offset for each function
+        # initialize the offset for each function
         Offset.sum = 0
         print(f"    .text")
-        print(f"    .globl {node.function_name}")
+        print(f"    .global {node.function_name}")
         print(f"{node.function_name}:")
         # Prologue
         print(f"    push %rbp")
